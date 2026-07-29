@@ -1,0 +1,10 @@
+# clamit CODEOWNERS
+
+# Default owners
+* @yourusername
+
+# Backend
+/backend/ @yourusername
+
+# Android
+/android/ @yourusername

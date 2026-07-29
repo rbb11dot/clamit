@@ -1,0 +1,48 @@
+# clamit — .gitignore
+
+## Go
+backend/bin/
+backend/tmp/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+## Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/captures/
+android/.externalNativeBuild/
+*.apk
+*.aab
+*.hprof
+*.keystore
+
+## IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Environment
+.env
+.env.local
+.env.*.local
+
+## Agent
+agent_docs/*.md
+!agent_docs/architecture.md
+!agent_docs/testing.md
+!agent_docs/conventions.md

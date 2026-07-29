@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  backend-lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - run: go vet ./...
+
+  backend-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+      - run: go test ./... -v
+
+  backend-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Build binaries (all platforms)
+        run: |
+          mkdir -p dist
+          GOOS=linux   GOARCH=amd64 go build -o dist/clamit-linux-amd64 ./cmd/server
+          GOOS=darwin  GOARCH=amd64 go build -o dist/clamit-darwin-amd64 ./cmd/server
+          GOOS=darwin  GOARCH=arm64 go build -o dist/clamit-darwin-arm64 ./cmd/server
+          GOOS=windows GOARCH=amd64 go build -o dist/clamit-windows-amd64.exe ./cmd/server
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clamit-backend
+          path: backend/dist/
+
+  android-lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew lint
+
+  android-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew test
+
+  android-build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build debug APK
+        run: ./gradlew assembleDebug
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: clamit-android-debug
+          path: android/app/build/outputs/apk/debug/*.apk

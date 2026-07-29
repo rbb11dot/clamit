@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      "bash .claude/hooks/session-setup.sh"
+    ],
+    "PreToolUse": [
+      {
+        "match": [
+          "Bash(git push*)",
+          "Bash(gh pr create*)"
+        ],
+        "command": "bash scripts/pre-push-check.sh"
+      }
+    ]
+  }
+}
