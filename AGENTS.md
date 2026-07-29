@@ -125,7 +125,7 @@ After every API call, command execution, or file operation:
 To download the latest continuous build:
 ```bash
 curl -LO https://github.com/rbb11dot/clamit/releases/download/continuous/clamit-linux-amd64.tar.gz
-curl -LO https://github.com/rbb11dot/clamit/releases/download/continuous/clamit-android-debug.apk
+curl -LO https://github.com/rbb11dot/clamit/releases/download/continuous/app-debug.apk
 ```
 
 To test a local code change, use `go run ./cmd/server` (not `go build`).

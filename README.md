@@ -11,9 +11,9 @@ Schedule tracking, task management (habits/tasks/quick tasks), Obsidian-style no
 
 ```bash
 # Download the latest APK from the continuous release
-curl -LO https://github.com/rbb11dot/clamit/releases/download/continuous/clamit-android-debug.apk
+curl -LO https://github.com/rbb11dot/clamit/releases/download/continuous/app-debug.apk
 # Install (requires Android device or emulator)
-adb install clamit-android-debug.apk
+adb install app-debug.apk
 ```
 
 ### Backend (Linux)
