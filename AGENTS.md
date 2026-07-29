@@ -131,6 +131,51 @@ curl -LO https://github.com/rbb11dot/clamit/releases/download/continuous/app-deb
 To test a local code change, use `go run ./cmd/server` (not `go build`).
 The CI build is the canonical build — if it fails on CI, your code is broken.
 
+### 12. Don't Reinvent the Wheel — Use Existing Libraries
+
+**Never** write something from scratch when a well-established library exists.
+Search the project and the ecosystem first. Duplicating framework logic is
+the #1 waste of agent time and token budget.
+
+**Before writing ANY code, check:**
+- Is there a Go standard library package for this? (`net/http`, `encoding/json`,
+  `database/sql`, `html/template`, `time`, `crypto/...`)
+- Is there a known Go library? (`modernc.org/sqlite` for pure-Go SQLite,
+  `goldmark` for markdown, `google/uuid` for UUIDs)
+- Is there an Android Jetpack library for this? (Navigation, Room, DataStore,
+  WorkManager, Compose Material3)
+- Does the project already have a similar pattern or utility you can follow?
+
+**Go — don't write these from scratch:**
+
+| Need | Use | Why |
+|---|---|---|
+| SQLite driver | `modernc.org/sqlite` | Pure Go, no CGO, works on Termux |
+| HTTP routing | `net/http` (Go 1.22+ ServeMux) | Method-based routing built in |
+| JSON handling | `encoding/json` | Standard library, no alternatives needed |
+| Markdown parsing | `github.com/yuin/goldmark` | Standard, extensible, fast |
+| CLI flags | `flag` or `github.com/alecthomas/kong` | stdlib or de facto standard |
+| UUID | `github.com/google/uuid` | Industry standard |
+| Scheduling | `time.Ticker` / `time.Timer` | Stdlib, good enough for local scheduling |
+
+**Android — don't write these from scratch:**
+
+| Need | Use | Why |
+|---|---|---|
+| Navigation | Jetpack Navigation Compose | Official, type-safe, tested |
+| State | ViewModel + StateFlow | Official, lifecycle-aware |
+| HTTP client | OkHttp + Retrofit | Industry standard |
+| JSON | Kotlinx Serialization / Moshi | Kotlin-first, no reflection |
+| Image loading | Coil | Compose-native, lightweight |
+| Local DB | Room (SQLite wrapper) | Official, compile-time queries |
+| DI | Hilt / manual constructor DI | Hilt is standard for Android |
+| Markdown render | `com.github.jeziellago:Markwon` | Popular Android markdown lib |
+| Date/time | `java.time` (desugared) | Modern, immutable, no Joda-Time |
+
+**Rule of thumb:** If you're writing more than 50 lines of infrastructure code
+(logging, config loading, DB setup, routing, serialization), stop and ask:
+"Is there a library for this?" The answer is almost always yes.
+
 ## Commands
 
 ```bash
