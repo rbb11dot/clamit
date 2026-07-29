@@ -118,14 +118,14 @@ After every API call, command execution, or file operation:
 
 **Never** build APK or Go binaries locally. All builds run on GitHub Actions:
 - Every push/PR triggers CI (`.github/workflows/ci.yml`): lint → test → build
-- Build artifacts are uploaded as GitHub Actions artifacts
-- Releases tagged `v*` trigger `.github/workflows/release.yml` for production binaries + APK
-- Download builds from: GitHub repo → Actions → workflow run → Artifacts
+- Every **successful push to main** auto-publishes a **continuous release** with binaries + APK
+  - Download: `https://github.com/rbb11dot/clamit/releases/download/continuous/...`
+- Versioned releases: tag `v*` triggers `.github/workflows/release.yml`
 
-To download the latest build:
+To download the latest continuous build:
 ```bash
-gh run download --name clamit-backend
-gh run download --name clamit-android-debug
+curl -LO https://github.com/rbb11dot/clamit/releases/download/continuous/clamit-linux-amd64.tar.gz
+curl -LO https://github.com/rbb11dot/clamit/releases/download/continuous/clamit-android-debug.apk
 ```
 
 To test a local code change, use `go run ./cmd/server` (not `go build`).
