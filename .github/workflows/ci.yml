@@ -67,7 +67,10 @@ jobs:
           java-version: "17"
           distribution: "temurin"
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew lint
+        with:
+          gradle-version: "8.11.1"
+      - run: gradle wrapper --gradle-version 8.11.1
+      - run: gradle lint
 
   android-test:
     runs-on: ubuntu-latest
@@ -81,7 +84,10 @@ jobs:
           java-version: "17"
           distribution: "temurin"
       - uses: gradle/actions/setup-gradle@v4
-      - run: ./gradlew test
+        with:
+          gradle-version: "8.11.1"
+      - run: gradle wrapper --gradle-version 8.11.1
+      - run: gradle test
 
   android-build:
     runs-on: ubuntu-latest
@@ -95,9 +101,12 @@ jobs:
           java-version: "17"
           distribution: "temurin"
       - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - run: gradle wrapper --gradle-version 8.11.1
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug
+        run: gradle assembleDebug
 
       - uses: actions/upload-artifact@v4
         with:
