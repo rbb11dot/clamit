@@ -5,11 +5,11 @@ Schedule tracking, task management (habits/tasks/quick tasks), Obsidian-style no
 
 ## Tech Stack
 
-- **Backend:** Go (7/24 background service)
+- **Backend:** Go (runs on Termux — Android localhost)
 - **Frontend:** Kotlin, Android (native)
 - **Database:** SQLite (structured data), Markdown files (notes only)
 - **Auth:** none (local-first)
-- **Sync:** TBD
+- **Architecture:** Android app ←HTTP→ Go backend on same device via Termux
 
 ## Critical Rules — Agent MUST Follow
 

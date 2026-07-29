@@ -5,16 +5,17 @@
 ## Overview
 
 clamit is a local-first second brain app. The Go backend runs as a 7/24 service
-on the user's machine (or server). The Android app connects to it over HTTP.
+inside [Termux](https://termux.dev/) on the same Android device.
+The Android app connects to it over HTTP on localhost.
 
 ## Data Flow
 
 ```
 ┌──────────────┐     HTTP/REST     ┌──────────────┐
 │  Android App │ ◄──────────────► │  Go Backend  │
-│  (Kotlin)    │                   │  (localhost) │
+│  (Kotlin)    │                   │  (Termux)    │
 └──────────────┘                   └──────┬───────┘
-                                          │
+       same device, localhost             │
                               ┌───────────┴───────────┐
                               │                       │
                          ┌────────┐           ┌────────────┐
@@ -31,10 +32,11 @@ on the user's machine (or server). The Android app connects to it over HTTP.
 
 | Decision | Rationale |
 |---|---|
-| Go over Node/Python | Single binary, near-zero memory, starts in ms, runs forever |
-| Local-first, no cloud | Privacy, offline-by-default, no vendor lock-in |
-| SQLite + Markdown | Zero ops: no server to manage, notes are plain files you own |
-| REST over gRPC | Simpler tooling, easy to debug with curl, good enough for local |
+| Go over Node/Python | Single binary, near-zero memory, starts in ms, runs forever on Termux |
+| Local-first, no cloud | Privacy, offline-by-default, all data on device |
+| SQLite + Markdown | Zero ops, no server to manage, notes are plain files |
+| REST over gRPC | Simpler tooling, localhost latency is irrelevant |
+| Termux over separate server | Both app and backend on same phone, no network dependency |
 
 ## Backend Layers
 
@@ -60,6 +62,6 @@ service/       — background sync, notification scheduling
 
 ## Future Considerations
 
-- Eventually: Web UI (HTMX + Go templates) for desktop access
-- Eventually: Sync protocol between devices (optional)
+- Eventually: Web UI (HTMX + Go templates) for desktop/tablet access
+- Eventually: Sync protocol between devices (optional, offline-first always)
 - Never: User accounts, cloud dependency, proprietary formats

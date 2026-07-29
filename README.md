@@ -1,51 +1,56 @@
 # clamit — Second Brain
 
-Go backend + Kotlin Android second brain app.
+Go backend + Kotlin Android second brain application.
 Schedule tracking, task management (habits/tasks/quick tasks), Obsidian-style notes.
+
+**Architecture:** Android app + Go backend running locally on the same device via [Termux](https://termux.dev/).
 
 > **Status:** Early development. Everything changes.
 
 ## Quick Install
 
-### Android
+### 1. Android App
 
 ```bash
-# Download the latest APK from the continuous release
 curl -LO https://github.com/rbb11dot/clamit/releases/download/continuous/app-debug.apk
-# Install (requires Android device or emulator)
 adb install app-debug.apk
 ```
 
-### Backend (Linux)
+### 2. Backend (Termux — Android)
+
+Open Termux on your phone and run:
 
 ```bash
-# Download & extract
-curl -L https://github.com/rbb11dot/clamit/releases/download/continuous/clamit-linux-amd64.tar.gz | tar xz
+# Download
+curl -LO https://github.com/rbb11dot/clamit/releases/download/continuous/clamit-linux-arm64.tar.gz
+# Extract
+tar xzf clamit-linux-arm64.tar.gz
+# Make executable
+chmod +x clamit-linux-arm64
 # Run
-./clamit-linux-amd64
+./clamit-linux-arm64
 ```
 
-### Backend (macOS)
+### Backend (other platforms)
 
 ```bash
-# Apple Silicon
+# Linux (x86_64)
+curl -L https://github.com/rbb11dot/clamit/releases/download/continuous/clamit-linux-amd64.tar.gz | tar xz
+
+# macOS (Apple Silicon)
 curl -L https://github.com/rbb11dot/clamit/releases/download/continuous/clamit-darwin-arm64.tar.gz | tar xz
-# Intel
+
+# macOS (Intel)
 curl -L https://github.com/rbb11dot/clamit/releases/download/continuous/clamit-darwin-amd64.tar.gz | tar xz
-```
 
-### Backend (Windows PowerShell)
-
-```powershell
+# Windows (PowerShell)
 curl.exe -LO https://github.com/rbb11dot/clamit/releases/download/continuous/clamit-windows-amd64.tar.gz
 tar xzf clamit-windows-amd64.tar.gz
-.\clamit-windows-amd64.exe
 ```
 
-### All in One
+### All Assets
 
 ```bash
-# List available assets
 gh release view continuous --json assets -q '.assets[].name'
 ```
 
@@ -65,16 +70,14 @@ cd android
 ./gradlew assembleDebug
 ```
 
-Builds are also available as CI artifacts: **Actions** → latest workflow → Artifacts.
-
 ## Tech Stack
 
-| Component | Technology |
-|---|---|
-| Backend | Go (7/24 background service) |
-| Frontend | Kotlin, Android (Jetpack Compose) |
-| Database | SQLite (structured data), Markdown (notes) |
-| CI/CD | GitHub Actions |
+| Component | Technology | Runs on |
+|---|---|---|
+| Backend | Go | Termux (Android) / localhost |
+| App | Kotlin, Jetpack Compose | Android |
+| Database | SQLite + Markdown | Device-local |
+| CI/CD | GitHub Actions | Cloud |
 
 ## Project Structure
 

@@ -46,6 +46,7 @@ jobs:
         run: |
           mkdir -p dist
           GOOS=linux   GOARCH=amd64 go build -o dist/clamit-linux-amd64 ./cmd/server
+          GOOS=linux   GOARCH=arm64 go build -o dist/clamit-linux-arm64 ./cmd/server
           GOOS=darwin  GOARCH=amd64 go build -o dist/clamit-darwin-amd64 ./cmd/server
           GOOS=darwin  GOARCH=arm64 go build -o dist/clamit-darwin-arm64 ./cmd/server
           GOOS=windows GOARCH=amd64 go build -o dist/clamit-windows-amd64.exe ./cmd/server
@@ -132,7 +133,7 @@ jobs:
       - name: Package release assets
         run: |
           mkdir -p release-assets
-          for f in clamit-linux-amd64 clamit-darwin-amd64 clamit-darwin-arm64 clamit-windows-amd64.exe; do
+          for f in clamit-linux-amd64 clamit-linux-arm64 clamit-darwin-amd64 clamit-darwin-arm64 clamit-windows-amd64.exe; do
             if [ -f "$f" ]; then
               platform="${f%.exe}"
               tar czf "release-assets/${platform}.tar.gz" "$f"
