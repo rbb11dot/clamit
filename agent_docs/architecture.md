@@ -37,6 +37,7 @@ The Android app connects to it over HTTP on localhost.
 | SQLite + Markdown | Zero ops, no server to manage, notes are plain files |
 | REST over gRPC | Simpler tooling, localhost latency is irrelevant |
 | Termux over separate server | Both app and backend on same phone, no network dependency |
+| fsnotify for file watching | Standard Go library, inotify-based, zero deps |
 
 ## Backend Layers
 

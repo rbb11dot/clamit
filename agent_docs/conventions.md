@@ -46,6 +46,7 @@
 
 - ViewModels own all UI state
 - State is exposed as `StateFlow` from ViewModel
+- DI via **Koin**: `viewModel { MyViewModel(get()) }` in a Koin module
 - Compose observes with `collectAsStateWithLifecycle()`
 - No mutable state outside ViewModel
 

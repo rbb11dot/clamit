@@ -168,7 +168,7 @@ the #1 waste of agent time and token budget.
 | JSON | Kotlinx Serialization / Moshi | Kotlin-first, no reflection |
 | Image loading | Coil | Compose-native, lightweight |
 | Local DB | Room (SQLite wrapper) | Official, compile-time queries |
-| DI | Hilt / manual constructor DI | Hilt is standard for Android |
+| DI | Koin | Kotlin-first, lightweight, no annotation processing |
 | Markdown render | `com.github.jeziellago:Markwon` | Popular Android markdown lib |
 | Date/time | `java.time` (desugared) | Modern, immutable, no Joda-Time |
 
