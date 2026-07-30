@@ -259,7 +259,12 @@ func (h *ScheduleHandler) getEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if entry == nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "entry not found"})
+		// Return an empty entry with today's date so the app doesn't crash
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"date":       date,
+			"isSpecial":  false,
+			"blocks":     []interface{}{},
+		})
 		return
 	}
 	writeJSON(w, http.StatusOK, entry)
