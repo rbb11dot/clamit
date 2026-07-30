@@ -1,7 +1,6 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
-    kotlin("plugin.serialization") version "2.4.10"
 }
 
 android {
@@ -47,19 +46,17 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.9.0")
 
     // Koin
-    implementation("io.insert-koin:koin-androidx-compose:4.0.3")
-    implementation("io.insert-koin:koin-android:4.0.3")
+    implementation(platform("io.insert-koin:koin-bom:4.0.3"))
+    implementation("io.insert-koin:koin-core")
+    implementation("io.insert-koin:koin-android")
+    implementation("io.insert-koin:koin-androidx-compose")
 
-    // Retrofit + OkHttp
+    // Retrofit + Gson
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
-    // Kotlinx Serialization
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
-    implementation("com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter:1.0.0")
-
-    // Material icons extended (for default icons)
+    // Material icons extended
     implementation("androidx.compose.material:material-icons-extended")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
