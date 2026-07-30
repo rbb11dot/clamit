@@ -46,3 +46,6 @@ agent_docs/*.md
 !agent_docs/architecture.md
 !agent_docs/testing.md
 !agent_docs/conventions.md
+*.db
+*.db-shm
+*.db-wal
