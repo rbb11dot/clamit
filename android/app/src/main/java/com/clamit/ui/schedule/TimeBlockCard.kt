@@ -106,7 +106,7 @@ fun TimeBlockCard(
                 Box(
                     modifier = Modifier
                         .width(2.dp)
-                        .height(block.subtaskStates.size * 36 + 10)
+                        .height((block.subtaskStates.size * 36 + 10).dp)
                         .background(statusColor, RoundedCornerShape(1.dp))
                 )
 
