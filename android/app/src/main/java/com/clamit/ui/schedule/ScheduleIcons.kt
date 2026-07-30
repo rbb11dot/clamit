@@ -1,11 +1,6 @@
 package com.clamit.ui.schedule
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.DirectionsRun
-import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.vector.ImageVector
 
@@ -22,15 +17,15 @@ object ScheduleIcons {
 
     private val iconMap: Map<String, ImageVector> = mapOf(
         "alarm" to Icons.Default.Alarm,
-        "arrow_back" to Icons.AutoMirrored.Filled.ArrowBack,
-        "arrow_forward" to Icons.AutoMirrored.Filled.ArrowForward,
+        "arrow_back" to Icons.Default.ArrowBack,
+        "arrow_forward" to Icons.Default.ArrowForward,
         "book" to Icons.Default.Book,
         "briefcase" to Icons.Default.Work,
         "build" to Icons.Default.Build,
         "coffee" to Icons.Default.Coffee,
         "create" to Icons.Default.Create,
         "delete" to Icons.Default.Delete,
-        "directions_run" to Icons.AutoMirrored.Filled.DirectionsRun,
+        "directions_run" to Icons.Default.DirectionsRun,
         "edit" to Icons.Default.Edit,
         "email" to Icons.Default.Email,
         "emoji_events" to Icons.Default.EmojiEvents,
@@ -38,10 +33,10 @@ object ScheduleIcons {
         "fitness_center" to Icons.Default.FitnessCenter,
         "home" to Icons.Default.Home,
         "info" to Icons.Default.Info,
-        "list" to Icons.AutoMirrored.Filled.List,
+        "list" to Icons.Default.List,
         "local_dining" to Icons.Default.LocalDining,
         "menu" to Icons.Default.Menu,
-        "menu_book" to Icons.AutoMirrored.Filled.MenuBook,
+        "menu_book" to Icons.Default.MenuBook,
         "more_vert" to Icons.Default.MoreVert,
         "nightlight" to Icons.Default.Nightlight,
         "notifications" to Icons.Default.Notifications,
@@ -73,7 +68,7 @@ object ScheduleIcons {
         "done_all" to Icons.Default.DoneAll,
         "drag_handle" to Icons.Default.DragHandle,
         "event" to Icons.Default.Event,
-        "format_list_bulleted" to Icons.AutoMirrored.Filled.FormatListBulleted,
+        "format_list_bulleted" to Icons.Default.FormatListBulleted,
         "keyboard_arrow_down" to Icons.Default.KeyboardArrowDown,
         "keyboard_arrow_up" to Icons.Default.KeyboardArrowUp,
         "play_arrow" to Icons.Default.PlayArrow,
