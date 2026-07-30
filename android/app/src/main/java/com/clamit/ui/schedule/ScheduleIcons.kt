@@ -20,7 +20,7 @@ object ScheduleIcons {
         "arrow_back" to Icons.Default.ArrowBack,
         "arrow_forward" to Icons.Default.ArrowForward,
         "book" to Icons.Default.Book,
-        "briefcase" to Icons.Default.Briefcase,
+        "briefcase" to Icons.Default.Work,
         "build" to Icons.Default.Build,
         "coffee" to Icons.Default.Coffee,
         "create" to Icons.Default.Create,

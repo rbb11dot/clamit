@@ -63,13 +63,13 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
         }
     ) {
         when (page) {
-            0 -> SchedulePage(viewModel, uiState, drawerState,
+            0 -> SchedulePage(viewModel, uiState, drawerState, scope,
                 onDatePicker = { showDatePicker = true },
                 onBlockEdit = { showBlockEditor = true },
                 onTemplatePicker = { showTemplatePicker = true })
-            1 -> TemplatesPage(viewModel, uiState, drawerState,
+            1 -> TemplatesPage(viewModel, uiState, drawerState, scope,
                 onNewTemplate = { showTemplateEditor = true })
-            2 -> BlocksPage(viewModel, uiState, drawerState,
+            2 -> BlocksPage(viewModel, uiState, drawerState, scope,
                 onNewBlock = { showBlockEditor = true })
         }
     }
@@ -88,6 +88,7 @@ private fun SchedulePage(
     viewModel: ScheduleViewModel,
     uiState: ScheduleUiState,
     drawerState: DrawerState,
+    scope: kotlinx.coroutines.CoroutineScope,
     onDatePicker: () -> Unit,
     onBlockEdit: () -> Unit,
     onTemplatePicker: () -> Unit
@@ -163,6 +164,7 @@ private fun TemplatesPage(
     viewModel: ScheduleViewModel,
     uiState: ScheduleUiState,
     drawerState: DrawerState,
+    scope: kotlinx.coroutines.CoroutineScope,
     onNewTemplate: () -> Unit
 ) {
     Scaffold(
@@ -208,6 +210,7 @@ private fun BlocksPage(
     viewModel: ScheduleViewModel,
     uiState: ScheduleUiState,
     drawerState: DrawerState,
+    scope: kotlinx.coroutines.CoroutineScope,
     onNewBlock: () -> Unit
 ) {
     Scaffold(
