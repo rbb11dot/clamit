@@ -53,7 +53,7 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
                     onClick = { currentPage = SchedulePage.HOME; scope.launch { drawerState.close() } }
                 )
                 NavigationDrawerItem(
-                    icon = { Icon(Icons.AutoMirrored.Filled.FormatListBulleted, contentDescription = null) },
+                    icon = { Icon(Icons.Default.FormatListBulleted, contentDescription = null) },
                     label = { Text("Gün Şablonları") },
                     selected = currentPage == SchedulePage.TEMPLATES,
                     onClick = { currentPage = SchedulePage.TEMPLATES }
