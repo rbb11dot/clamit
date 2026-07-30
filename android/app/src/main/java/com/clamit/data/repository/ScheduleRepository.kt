@@ -22,6 +22,7 @@ class ScheduleRepository(private val api: ScheduleApi) {
 
     // Schedule
     suspend fun getEntry(date: String) = api.getEntry(date)
+    suspend fun createEntry(date: String) = api.createEntry(date)
     suspend fun setEntryTemplate(date: String, templateId: String?) =
         api.setEntryTemplate(date, SetTemplateRequest(templateId))
     suspend fun addSpecialBlock(date: String, blockId: String) =

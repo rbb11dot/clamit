@@ -39,6 +39,9 @@ interface ScheduleApi {
     @GET("api/schedule/{date}")
     suspend fun getEntry(@Path("date") date: String): ScheduleEntry
 
+    @POST("api/schedule/{date}")
+    suspend fun createEntry(@Path("date") date: String): ScheduleEntry
+
     @PUT("api/schedule/{date}/template")
     suspend fun setEntryTemplate(@Path("date") date: String, @Body req: SetTemplateRequest): ScheduleEntry
 

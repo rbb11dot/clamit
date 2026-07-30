@@ -36,7 +36,15 @@ class ScheduleViewModel(
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
                 val dateStr = _uiState.value.currentDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
-                val entryDeferred = async { repository.getEntry(dateStr) }
+                val entryDeferred = async { 
+                    // First ensure entry exists, then read
+                    try {
+                        repository.createEntry(dateStr)
+                    } catch (_: Exception) {
+                        // If already exists, just get it
+                    }
+                    repository.getEntry(dateStr)
+                }
                 val templatesDeferred = async { repository.listTemplates() }
                 val entry = entryDeferred.await()
                 val templates = templatesDeferred.await()
