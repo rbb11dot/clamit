@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.clamit.data.model.*
 import com.clamit.data.repository.ScheduleRepository
-import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,16 +35,19 @@ class ScheduleViewModel(
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
                 val dateStr = _uiState.value.currentDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
-                val entryDeferred = async { repository.getEntry(dateStr) }
-                val templatesDeferred = async { repository.listTemplates() }
-                val entry = entryDeferred.await()
-                val templates = templatesDeferred.await()
+                val entry = repository.getEntry(dateStr)
+                val templates = repository.listTemplates()
                 _uiState.value = _uiState.value.copy(
                     entry = entry,
                     templates = templates,
                     isLoading = false
                 )
-            } catch (e: Exception) {
+            } catch (e: retrofit2.HttpException) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "HTTP ${e.code()}: ${e.message()}"
+                )
+            } catch (e: Throwable) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = e.message ?: "Unknown error"
