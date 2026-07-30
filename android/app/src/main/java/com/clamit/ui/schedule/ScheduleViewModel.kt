@@ -121,4 +121,69 @@ class ScheduleViewModel(
             }
         }
     }
+
+    fun createBlock(templateId: String, name: String, icon: String, mode: String, startTime: String, endTime: String?, durationMin: Int?, subtaskNames: List<String>) {
+        viewModelScope.launch {
+            try {
+                val req = CreateBlockRequest(
+                    name = name,
+                    icon = icon,
+                    mode = mode,
+                    startTime = startTime,
+                    endTime = endTime,
+                    durationMin = durationMin,
+                    subtasks = subtaskNames.map { SubtaskRequest(it) }
+                )
+                repository.createBlock(templateId, req)
+                load()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = e.message)
+            }
+        }
+    }
+
+    fun createTemplate(name: String, icon: String, repeatDays: List<Int>) {
+        viewModelScope.launch {
+            try {
+                repository.createTemplate(CreateTemplateRequest(name, icon, repeatDays))
+                load()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = e.message)
+            }
+        }
+    }
+
+    fun addBlockToDate(blockId: String) {
+        viewModelScope.launch {
+            try {
+                val dateStr = _uiState.value.currentDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
+                repository.addSpecialBlock(dateStr, blockId)
+                load()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = e.message)
+            }
+        }
+    }
+
+    fun deleteBlock(blockId: String) {
+        viewModelScope.launch {
+            try {
+                repository.deleteBlock(blockId)
+                load()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = e.message)
+            }
+        }
+    }
+
+    fun deleteTemplate(templateId: String) {
+        viewModelScope.launch {
+            try {
+                repository.deleteTemplate(templateId)
+                load()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = e.message)
+            }
+        }
+    }
 }
