@@ -1,7 +1,5 @@
 package models
 
-import "time"
-
 // ---- Day Template ----
 
 type DayTemplate struct {
@@ -9,7 +7,7 @@ type DayTemplate struct {
 	Name       string    `json:"name"`
 	Icon       string    `json:"icon"`
 	RepeatDays []int     `json:"repeatDays"`
-	CreatedAt  time.Time `json:"createdAt"`
+	CreatedAt  string    `json:"createdAt"`
 }
 
 type CreateTemplateReq struct {
@@ -37,7 +35,7 @@ type TimeBlock struct {
 	DurationMin  *int      `json:"durationMin,omitempty"`
 	BlockOrder   int       `json:"blockOrder"`
 	Subtasks     []Subtask `json:"subtasks,omitempty"`
-	CreatedAt    time.Time `json:"createdAt"`
+	CreatedAt    string    `json:"createdAt"`
 }
 
 type CreateBlockReq struct {
@@ -88,7 +86,7 @@ type ScheduleEntry struct {
 	TemplateName *string        `json:"templateName,omitempty"`
 	IsSpecial    bool           `json:"isSpecial"`
 	Blocks       []BlockState   `json:"blocks,omitempty"`
-	CreatedAt    time.Time      `json:"createdAt"`
+	CreatedAt    string      `json:"createdAt"`
 }
 
 type BlockState struct {
