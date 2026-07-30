@@ -65,7 +65,8 @@ fun TemplatesPage(
 @Composable
 fun TemplateEditorPage(
     onDismiss: () -> Unit,
-    viewModel: ScheduleViewModel
+    viewModel: ScheduleViewModel,
+    uiState: ScheduleUiState
 ) {
     var name by remember { mutableStateOf("") }
     var templateIcon by remember { mutableStateOf("format_list_bulleted") }

@@ -69,7 +69,7 @@ fun ScheduleHomePage(
         Box(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
             when {
                 uiState.isLoading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                uiState.error != null -> Text("Hata: ${uiState.error}", color = MaterialTheme.colorScheme.error, Modifier.align(Alignment.Center))
+                uiState.error != null -> Text(text = "Hata: ${uiState.error}", color = MaterialTheme.colorScheme.error, modifier = Modifier.align(Alignment.Center))
                 else -> {
                     val entry = uiState.entry
                     if (entry == null) {
@@ -79,7 +79,7 @@ fun ScheduleHomePage(
                             Modifier.align(Alignment.Center),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text("Bu gün için zaman bloğu yok.", style = MaterialTheme.typography.bodyLarge)
+                                            Text("Bu gün için zaman bloğu yok.", style = MaterialTheme.typography.bodyLarge)
                             Spacer(Modifier.height(8.dp))
                             Text("Butonuna basarak blok ekleyin.", style = MaterialTheme.typography.bodyMedium)
                         }

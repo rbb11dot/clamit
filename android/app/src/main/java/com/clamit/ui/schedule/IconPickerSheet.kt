@@ -31,7 +31,7 @@ fun IconPickerSheet(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                items(ScheduleIcons.icons) { iconName ->
+                items(ScheduleIcons.all) { iconName ->
                     val vector = ScheduleIcons.getIconOrDefault(iconName)
                     FilledTonalIconButton(
                         onClick = { onSelect(iconName); onDismiss() },

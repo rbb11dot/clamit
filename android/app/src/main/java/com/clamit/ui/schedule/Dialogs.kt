@@ -4,7 +4,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import java.time.Instant
 import java.time.ZoneId
 
@@ -66,7 +68,7 @@ fun TemplatePickerDialog(
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(Modifier.width(12.dp))
-                        Text(t.name, style = MaterialTheme.typography.bodyLarge)
+                        Text(text = t.name, style = MaterialTheme.typography.bodyLarge)
                     }
                 }
             }

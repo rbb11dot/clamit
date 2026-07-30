@@ -99,5 +99,5 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
     if (showDatePicker) DatePickerDialog(viewModel, uiState) { showDatePicker = false }
     if (showTemplatePicker) TemplatePickerDialog(viewModel, uiState) { showTemplatePicker = false }
     if (showBlockEditor) BlockEditorPage(onDismiss = { showBlockEditor = false }, viewModel = viewModel)
-    if (showTemplateEditor) TemplateEditorPage(onDismiss = { showTemplateEditor = false }, viewModel = viewModel)
+    if (showTemplateEditor) TemplateEditorPage(onDismiss = { showTemplateEditor = false }, viewModel = viewModel, uiState = uiState)
 }
