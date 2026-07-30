@@ -45,11 +45,15 @@ if [ "$OS" = "linux" ] && [ -d /data/data/com.termux ]; then
 fi
 
 # --- Download binary ---
-echo "Downloading: $FILE"
-curl -fL "$BASE/$FILE" -o "/tmp/$FILE"
-tar xzf "/tmp/$FILE" -C /tmp
+TMP_DIR="$(mktemp -p "${TMPDIR:-$HOME}" -d clamit-install-XXXXXX)"
+cleanup() { rm -rf "$TMP_DIR"; }
+trap cleanup EXIT
 
-BINARY="/tmp/${FILE%.tar.gz}"
+echo "Downloading: $FILE"
+curl -fL "$BASE/$FILE" -o "$TMP_DIR/$FILE"
+tar xzf "$TMP_DIR/$FILE" -C "$TMP_DIR"
+
+BINARY="$TMP_DIR/${FILE%.tar.gz}"
 chmod +x "$BINARY"
 
 # --- Install ---
