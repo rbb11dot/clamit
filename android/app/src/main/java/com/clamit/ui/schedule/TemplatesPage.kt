@@ -78,7 +78,7 @@ fun TemplateEditorPage(
         topBar = {
             TopAppBar(
                 title = { Text("Gün Şablonu Oluştur") },
-                navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.Default.ArrowBack, "Geri") } }
+                navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri") } }
             )
         }
     ) { padding ->

@@ -50,7 +50,7 @@ fun TemplatePickerDialog(
                 TextButton(onClick = { onDismiss() }) {
                     Text("Şablon Seçin")
                 }
-                Divider()
+                HorizontalDivider()
                 uiState.templates.forEach { t ->
                     Row(
                         modifier = Modifier

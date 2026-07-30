@@ -45,7 +45,7 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
                 Spacer(Modifier.height(24.dp))
                 Text("clamit", style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp))
-                Divider()
+                HorizontalDivider()
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.DateRange, contentDescription = null) },
                     label = { Text("Schedule") },
@@ -53,7 +53,7 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
                     onClick = { currentPage = SchedulePage.HOME; scope.launch { drawerState.close() } }
                 )
                 NavigationDrawerItem(
-                    icon = { Icon(Icons.Default.FormatListBulleted, contentDescription = null) },
+                    icon = { Icon(Icons.AutoMirrored.Filled.FormatListBulleted, contentDescription = null) },
                     label = { Text("Gün Şablonları") },
                     selected = currentPage == SchedulePage.TEMPLATES,
                     onClick = { currentPage = SchedulePage.TEMPLATES }

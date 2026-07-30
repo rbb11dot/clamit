@@ -68,7 +68,7 @@ fun BlockEditorPage(
         topBar = {
             TopAppBar(
                 title = { Text("Zaman Bloğu Oluştur") },
-                navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.Default.ArrowBack, "Geri") } }
+                navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri") } }
             )
         }
     ) { padding ->

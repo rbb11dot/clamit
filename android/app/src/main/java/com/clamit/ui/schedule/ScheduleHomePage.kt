@@ -42,7 +42,7 @@ fun ScheduleHomePage(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         IconButton(onClick = viewModel::goToPreviousDay, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.ArrowBack, "Önceki", modifier = Modifier.size(20.dp))
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Önceki", modifier = Modifier.size(20.dp))
                         }
                         Column(
                             modifier = Modifier.clickable(onClick = onDatePicker),
@@ -52,7 +52,7 @@ fun ScheduleHomePage(
                             Text(uiState.currentDate.format(dayFormatter), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
                         }
                         IconButton(onClick = viewModel::goToNextDay, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.ArrowForward, "Sonraki", modifier = Modifier.size(20.dp))
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, "Sonraki", modifier = Modifier.size(20.dp))
                         }
                     }
                 },
