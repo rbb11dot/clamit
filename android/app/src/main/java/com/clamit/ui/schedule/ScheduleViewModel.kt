@@ -35,6 +35,10 @@ class ScheduleViewModel(
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
                 val dateStr = _uiState.value.currentDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
+                // First create entry if it doesn't exist
+                try {
+                    repository.createEntry(dateStr)
+                } catch (_: Exception) { /* already exists, ignore */ }
                 val entry = repository.getEntry(dateStr)
                 val templates = repository.listTemplates()
                 _uiState.value = _uiState.value.copy(
