@@ -135,11 +135,11 @@ private fun SchedulePage(
         Box(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
             when {
                 uiState.isLoading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                uiState.error != null -> Text("Hata: ${uiState.error}", color = MaterialTheme.colorScheme.error, Modifier.align(Alignment.Center))
+                uiState.error != null -> Text(text = "Hata: ${uiState.error}", color = MaterialTheme.colorScheme.error, modifier = Modifier.align(Alignment.Center))
                 else -> {
                     val entry = uiState.entry
-                    if (entry == null) Text("Yükleniyor...", Modifier.align(Alignment.Center))
-                    else if (entry.blocks.isEmpty()) Text("Bu gün için zaman bloğu yok.\n+ butonu ile ekleyin.", Modifier.align(Alignment.Center))
+                    if (entry == null) Text(text = "Yükleniyor...", modifier = Modifier.align(Alignment.Center))
+                    else if (entry.blocks.isEmpty()) Text(text = "Bu gün için zaman bloğu yok.\n+ butonu ile ekleyin.", modifier = Modifier.align(Alignment.Center))
                     else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(entry.blocks, key = { it.timeBlockId }) { block ->
                             TimeBlockCard(

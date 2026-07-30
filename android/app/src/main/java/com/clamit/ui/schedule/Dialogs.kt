@@ -35,10 +35,11 @@ fun DatePickerDialog(
                 onDismiss()
             }) { Text("Seç") }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("İptal") } }
-    ) {
-        DatePicker(state = datePickerState)
-    }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("İptal") } },
+        text = {
+            DatePicker(state = datePickerState)
+        }
+    )
 }
 
 @Composable
