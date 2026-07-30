@@ -44,22 +44,27 @@ if [ "$OS" = "linux" ] && [ -d /data/data/com.termux ]; then
   pkg install -y curl tar
 fi
 
-# --- Download binary ---
-TMP_DIR="$(mktemp -p "${TMPDIR:-$HOME}" -d clamit-install-XXXXXX)"
-cleanup() { rm -rf "$TMP_DIR"; }
-trap cleanup EXIT
-
-echo "Downloading: $FILE"
-curl -fL "$BASE/$FILE" -o "$TMP_DIR/$FILE"
-tar xzf "$TMP_DIR/$FILE" -C "$TMP_DIR"
-
-BINARY="$TMP_DIR/${FILE%.tar.gz}"
-chmod +x "$BINARY"
-
-# --- Install ---
+# --- Install directory ---
 INSTALL_DIR="${CLAMIT_HOME:-$HOME/.local/bin}"
 mkdir -p "$INSTALL_DIR"
-mv "$BINARY" "$INSTALL_DIR/clamit"
+
+# --- Download and extract directly to install dir ---
+echo "Downloading: $FILE"
+curl -fL "$BASE/$FILE" -o "$INSTALL_DIR/$FILE"
+
+echo "Extracting..."
+tar xzf "$INSTALL_DIR/$FILE" -C "$INSTALL_DIR"
+
+BINARY="$INSTALL_DIR/${FILE%.tar.gz}"
+chmod +x "$BINARY"
+
+# Remove archive
+rm "$INSTALL_DIR/$FILE"
+
+# Rename to clamit (strip platform suffix)
+if [ "$BINARY" != "$INSTALL_DIR/clamit" ]; then
+  mv "$BINARY" "$INSTALL_DIR/clamit"
+fi
 
 # --- APK (Termux only) ---
 if [ "$OS" = "linux" ] && [ -d /data/data/com.termux ]; then
