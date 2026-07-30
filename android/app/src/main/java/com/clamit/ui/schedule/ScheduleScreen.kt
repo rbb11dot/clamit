@@ -1,17 +1,19 @@
 package com.clamit.ui.schedule
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -20,224 +22,213 @@ import java.util.Locale
 @Composable
 fun ScheduleScreen(viewModel: ScheduleViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var page by remember { mutableIntStateOf(0) } // 0=schedule, 1=templates, 2=blocks
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
     var showDatePicker by remember { mutableStateOf(false) }
     var showTemplatePicker by remember { mutableStateOf(false) }
     var showBlockEditor by remember { mutableStateOf(false) }
     var showTemplateEditor by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            ScheduleTopBar(
-                currentDate = uiState.currentDate,
-                templateName = uiState.entry?.let { entry ->
-                    if (entry.isSpecial) "Özel Gün"
-                    else entry.templateName ?: "Şablon Seçin"
-                } ?: "Şablon Seçin",
-                onPreviousDay = viewModel::goToPreviousDay,
-                onNextDay = viewModel::goToNextDay,
-                onToday = viewModel::goToToday,
-                onDateClick = { showDatePicker = true },
-                onTemplateClick = { showTemplatePicker = true }
-            )
-        },
-        floatingActionButton = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SmallFloatingActionButton(
-                    onClick = { showTemplateEditor = true },
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer
-                ) {
-                    Icon(Icons.Default.ListAlt, contentDescription = "Şablon oluştur")
-                }
-                FloatingActionButton(
-                    onClick = { showBlockEditor = true }
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Blok ekle")
-                }
-            }
-        }
-    ) { padding ->
-        val entry = uiState.entry
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            when {
-                uiState.isLoading -> CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-                uiState.error != null -> {
-                    Text(
-                        text = "Hata: ${uiState.error}",
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-                entry != null -> {
-                    ScheduleEntryContent(
-                        entry = entry,
-                        onToggleSubtask = { blockId, subtaskId -> viewModel.toggleSubtask(blockId, subtaskId) },
-                        onSetManualStatus = { blockId, status -> viewModel.setManualStatus(blockId, status) }
-                    )
-                }
-                else -> Text("Yükleniyor...", modifier = Modifier.align(Alignment.Center))
-            }
-        }
-    }
-
-    // Dialogs
-    if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = uiState.currentDate
-                .atStartOfDay(java.time.ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli()
-        )
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        val date = java.time.Instant.ofEpochMilli(millis)
-                            .atZone(java.time.ZoneId.systemDefault())
-                            .toLocalDate()
-                        viewModel.setDate(date)
-                    }
-                    showDatePicker = false
-                }) { Text("Seç") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("İptal") }
-            }
-        ) { DatePicker(state = datePickerState) }
-    }
-
-    if (showTemplatePicker) {
-        AlertDialog(
-            onDismissRequest = { showTemplatePicker = false },
-            title = { Text("Gün Şablonu Seç") },
-            text = {
-                Column {
-                    TextButton(onClick = {
-                        viewModel.setEntryTemplate(null)
-                        showTemplatePicker = false
-                    }) { Text("📌 Özel Gün (şablonsuz)") }
-                    Divider()
-                    uiState.templates.forEach { template ->
-                        TextButton(onClick = {
-                            viewModel.setEntryTemplate(template.id)
-                            showTemplatePicker = false
-                        }) { Text("${template.icon} ${template.name}") }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showTemplatePicker = false }) { Text("İptal") }
-            }
-        )
-    }
-
-    if (showBlockEditor) {
-        BlockEditorDialog(
-            onDismiss = { showBlockEditor = false },
-            onSave = { name, icon, mode, startTime, endTime, durationMin, subtasks ->
-                // Create a new block and add it to the current date
-                viewModel.createBlock(
-                    templateId = uiState.entry?.templateId ?: "",
-                    name = name,
-                    icon = icon,
-                    mode = mode,
-                    startTime = startTime,
-                    endTime = endTime,
-                    durationMin = durationMin,
-                    subtaskNames = subtasks
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet {
+                Spacer(Modifier.height(12.dp))
+                Text("clamit", style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp))
+                Divider()
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.CalendarMonth, contentDescription = null) },
+                    label = { Text("Schedule") },
+                    selected = page == 0,
+                    onClick = { page = 0; scope.launch { drawerState.close() } }
                 )
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.FormatListBulleted, contentDescription = null) },
+                    label = { Text("Gün Şablonları") },
+                    selected = page == 1,
+                    onClick = { page = 1 }
+                )
+                NavigationDrawerItem(
+                    icon = { Icon(Icons.Default.Timer, contentDescription = null) },
+                    label = { Text("Zaman Blokları") },
+                    selected = page == 2,
+                    onClick = { page = 2 }
+                )
+                Divider()
+                Text("v0.1.0", style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(28.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-        )
+        }
+    ) {
+        when (page) {
+            0 -> SchedulePage(viewModel, uiState, drawerState,
+                onDatePicker = { showDatePicker = true },
+                onBlockEdit = { showBlockEditor = true },
+                onTemplatePicker = { showTemplatePicker = true })
+            1 -> TemplatesPage(viewModel, uiState, drawerState,
+                onNewTemplate = { showTemplateEditor = true })
+            2 -> BlocksPage(viewModel, uiState, drawerState,
+                onNewBlock = { showBlockEditor = true })
+        }
     }
 
-    if (showTemplateEditor) {
-        TemplateEditorDialog(
-            availableBlocks = emptyList(), // Will be loaded when we have block management
-            onDismiss = { showTemplateEditor = false },
-            onSave = { name, icon, repeatDays, blockIds ->
-                viewModel.createTemplate(name, icon, repeatDays)
-            }
-        )
-    }
+    if (showDatePicker) DatePickerDialog(viewModel, uiState) { showDatePicker = false }
+    if (showTemplatePicker) TemplatePickerDialog(viewModel, uiState) { showTemplatePicker = false }
+    if (showBlockEditor) FullBlockEditor(onDismiss = { showBlockEditor = false }, viewModel = viewModel)
+    if (showTemplateEditor) FullTemplateEditor(onDismiss = { showTemplateEditor = false }, viewModel = viewModel)
 }
+
+// ---- Schedule Home Page ----
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScheduleTopBar(
-    currentDate: LocalDate,
-    templateName: String,
-    onPreviousDay: () -> Unit,
-    onNextDay: () -> Unit,
-    onToday: () -> Unit,
-    onDateClick: () -> Unit,
-    onTemplateClick: () -> Unit
+private fun SchedulePage(
+    viewModel: ScheduleViewModel,
+    uiState: ScheduleUiState,
+    drawerState: DrawerState,
+    onDatePicker: () -> Unit,
+    onBlockEdit: () -> Unit,
+    onTemplatePicker: () -> Unit
 ) {
     val formatter = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale("tr"))
     val dayFormatter = DateTimeFormatter.ofPattern("EEEE", Locale("tr"))
 
-    Column {
-        TopAppBar(
-            title = {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(currentDate.format(formatter), style = MaterialTheme.typography.titleMedium)
-                    Text(currentDate.format(dayFormatter), style = MaterialTheme.typography.bodySmall)
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menü")
+                    }
+                },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth()) {
+                        IconButton(onClick = viewModel::goToPreviousDay, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.ArrowBack, "Önceki", modifier = Modifier.size(20.dp))
+                        }
+                        Column(Modifier.clickable(onClick = onDatePicker), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(uiState.currentDate.format(formatter), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+                            Text(uiState.currentDate.format(dayFormatter), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                        }
+                        IconButton(onClick = viewModel::goToNextDay, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.ArrowForward, "Sonraki", modifier = Modifier.size(20.dp))
+                        }
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onTemplatePicker) { Icon(Icons.Default.Schedule, "Şablon seç") }
+                    IconButton(onClick = viewModel::goToToday) { Icon(Icons.Default.Today, "Bugün") }
                 }
-            },
-            navigationIcon = {
-                Row {
-                    IconButton(onClick = onPreviousDay) { Icon(Icons.Default.ArrowBack, contentDescription = "Önceki gün") }
-                    TextButton(onClick = onDateClick) { Text("📅") }
-                }
-            },
-            actions = {
-                IconButton(onClick = onToday) { Icon(Icons.Default.Today, contentDescription = "Bugün") }
-                IconButton(onClick = onNextDay) { Icon(Icons.Default.ArrowForward, contentDescription = "Sonraki gün") }
-            }
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.Center
-        ) {
-            AssistChip(
-                onClick = onTemplateClick,
-                label = { Text(templateName) },
-                leadingIcon = { if (templateName == "Özel Gün") Text("📌") else Text("📋") }
             )
+        },
+        floatingActionButton = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                FloatingActionButton(onClick = onBlockEdit) { Icon(Icons.Default.Add, "Blok ekle") }
+            }
         }
-        Divider()
+    ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
+            when {
+                uiState.isLoading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                uiState.error != null -> Text("Hata: ${uiState.error}", color = MaterialTheme.colorScheme.error, Modifier.align(Alignment.Center))
+                else -> {
+                    val entry = uiState.entry
+                    if (entry == null) Text("Yükleniyor...", Modifier.align(Alignment.Center))
+                    else if (entry.blocks.isEmpty()) Text("Bu gün için zaman bloğu yok.\n+ butonu ile ekleyin.", Modifier.align(Alignment.Center))
+                    else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(entry.blocks, key = { it.timeBlockId }) { block ->
+                            TimeBlockCard(
+                                block = block,
+                                onToggleSubtask = { viewModel.toggleSubtask(block.timeBlockId, it) },
+                                onSetCompleted = { viewModel.setManualStatus(block.timeBlockId, "completed") },
+                                onSetNotCompleted = { viewModel.setManualStatus(block.timeBlockId, "not_completed") }
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
+// ---- Templates Page ----
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScheduleEntryContent(
-    entry: com.clamit.data.model.ScheduleEntry,
-    onToggleSubtask: (String, String) -> Unit,
-    onSetManualStatus: (String, String) -> Unit
+private fun TemplatesPage(
+    viewModel: ScheduleViewModel,
+    uiState: ScheduleUiState,
+    drawerState: DrawerState,
+    onNewTemplate: () -> Unit
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        if (entry.blocks.isEmpty()) {
-            item {
-                Text(
-                    text = "Bu gün için planlanmış zaman bloğu yok.\nSağ alttaki + butonu ile blok ekleyin.",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(vertical = 32.dp)
-                )
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                        Icon(Icons.Default.Menu, "Menü")
+                    }
+                },
+                title = { Text("Gün Şablonları") }
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = onNewTemplate) { Icon(Icons.Default.Add, "Yeni şablon") }
+        }
+    ) { padding ->
+        LazyColumn(Modifier.fillMaxSize().padding(padding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(uiState.templates, key = { it.id }) { t ->
+                Card(Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(16.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(ScheduleIcons.getIconOrDefault(t.icon), null, Modifier.size(32.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(t.name, style = MaterialTheme.typography.titleMedium)
+                            val days = t.repeatDays.joinToString(", ") { d ->
+                                listOf("Pazar","Pzt","Salı","Çar","Per","Cuma","Cmt").getOrElse(d){"?"} }
+                            Text(days, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        IconButton(onClick = { /* TODO: open detail */ }) { Icon(Icons.Default.Edit, "Düzenle") }
+                    }
+                }
             }
         }
-        items(entry.blocks, key = { it.timeBlockId }) { block ->
-            TimeBlockCard(
-                block = block,
-                onToggleSubtask = { subtaskId -> onToggleSubtask(block.timeBlockId, subtaskId) },
-                onSetCompleted = { onSetManualStatus(block.timeBlockId, "completed") },
-                onSetNotCompleted = { onSetManualStatus(block.timeBlockId, "not_completed") }
+    }
+}
+
+// ---- Blocks Page ----
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BlocksPage(
+    viewModel: ScheduleViewModel,
+    uiState: ScheduleUiState,
+    drawerState: DrawerState,
+    onNewBlock: () -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                        Icon(Icons.Default.Menu, "Menü")
+                    }
+                },
+                title = { Text("Zaman Blokları") }
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = onNewBlock) { Icon(Icons.Default.Add, "Yeni blok") }
+        }
+    ) { padding ->
+        Box(Modifier.fillMaxSize().padding(padding)) {
+            Text(
+                "Zaman blokları şablonlar içinde yönetilir.\nBir şablona blok eklemek için Şablonlar sayfasını kullanın.",
+                Modifier.align(Alignment.Center).padding(32.dp)
             )
         }
     }
