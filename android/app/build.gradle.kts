@@ -46,10 +46,9 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.9.0")
 
     // Koin
-    implementation(platform("io.insert-koin:koin-bom:4.0.3"))
-    implementation("io.insert-koin:koin-core")
-    implementation("io.insert-koin:koin-android")
-    implementation("io.insert-koin:koin-androidx-compose")
+    implementation("io.insert-koin:koin-core:4.0.3")
+    implementation("io.insert-koin:koin-android:4.0.3")
+    implementation("io.insert-koin:koin-androidx-compose:4.0.3")
 
     // Retrofit + Gson
     implementation("com.squareup.retrofit2:retrofit:2.11.0")

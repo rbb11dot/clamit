@@ -1,9 +1,7 @@
 package com.clamit.data.api
 
 import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
-import okhttp3.MediaType.Companion.toMediaType
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
