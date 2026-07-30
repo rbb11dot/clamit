@@ -1,9 +1,18 @@
 package api
 
-import "net/http"
+import (
+	"net/http"
 
-func RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /health", handleHealth)
+	"github.com/yourusername/clamit/internal/db"
+)
+
+func RegisterRoutes(mux *http.ServeMux, scheduleRepo *db.ScheduleRepo) {
+	// Health
+	mux.HandleFunc("GET /api/health", handleHealth)
+
+	// Schedule
+	schedule := NewScheduleHandler(scheduleRepo)
+	schedule.RegisterRoutes(mux)
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
