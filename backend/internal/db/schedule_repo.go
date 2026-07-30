@@ -320,29 +320,36 @@ func (r *ScheduleRepo) GetOrCreateEntry(ctx context.Context, date string) (*mode
 	}
 
 	id := uuid.New().String()
-	eid := id
 	if tmpl != nil {
 		_, err = r.db.ExecContext(ctx,
-			`INSERT INTO schedule_entries (id, date, template_id, is_special) VALUES (?, ?, ?, 0)`,
-			eid, date, tmpl.ID)
+			`INSERT OR IGNORE INTO schedule_entries (id, date, template_id, is_special) VALUES (?, ?, ?, 0)`,
+			id, date, tmpl.ID)
 	} else {
 		_, err = r.db.ExecContext(ctx,
-			`INSERT INTO schedule_entries (id, date, template_id, is_special) VALUES (?, ?, NULL, 1)`,
-			eid, date)
+			`INSERT OR IGNORE INTO schedule_entries (id, date, template_id, is_special) VALUES (?, ?, NULL, 1)`,
+			id, date)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("create entry: %w", err)
 	}
 
-	// Create block states from template
+	// Create block states from template (only if we won the insert)
 	if tmpl != nil {
+		// Check if we actually inserted (rowcount check is unreliable with INSERT OR IGNORE)
+		// Always try to create block states; GetEntry handles dedup via SELECT
 		blocks, err := r.ListBlocks(ctx, tmpl.ID)
 		if err != nil {
 			return nil, err
 		}
 		for _, b := range blocks {
-			if err := r.createBlockState(ctx, eid, b.ID); err != nil {
-				return nil, err
+			// Skip if state already exists (concurrent winner created it)
+			var existing string
+			if err := r.db.QueryRowContext(ctx,
+				`SELECT id FROM time_block_states WHERE entry_id=? AND time_block_id=?`,
+				id, b.ID).Scan(&existing); err == sql.ErrNoRows {
+				if err := r.createBlockState(ctx, id, b.ID); err != nil {
+					return nil, err
+				}
 			}
 		}
 	}
@@ -397,7 +404,9 @@ func (r *ScheduleRepo) SetEntryTemplate(ctx context.Context, date string, templa
 			`UPDATE schedule_entries SET template_id=?, is_special=0 WHERE id=?`, *templateID, entry.ID)
 		// Rebuild block states from template
 		if err == nil {
-			r.rebuildBlockStates(ctx, entry.ID, *templateID)
+			if rebuildErr := r.rebuildBlockStates(ctx, entry.ID, *templateID); rebuildErr != nil {
+				return nil, fmt.Errorf("rebuild block states: %w", rebuildErr)
+			}
 		}
 	}
 	if err != nil {
@@ -481,11 +490,11 @@ func (r *ScheduleRepo) ToggleSubtask(ctx context.Context, date string, blockID s
 		return fmt.Errorf("get block state: %w", err)
 	}
 
-	// Toggle subtask
+	// Toggle subtask — UNIQUE(time_block_state_id, subtask_id) ensures ON CONFLICT fires
 	_, err = r.db.ExecContext(ctx,
 		`INSERT INTO subtask_states (id, time_block_state_id, subtask_id, done)
 		 VALUES (?, ?, ?, 1)
-		 ON CONFLICT DO UPDATE SET done = NOT done`,
+		 ON CONFLICT(time_block_state_id, subtask_id) DO UPDATE SET done = NOT done`,
 		uuid.New().String(), stateID, subtaskID)
 	return err
 }
@@ -600,11 +609,17 @@ func (r *ScheduleRepo) getBlockStates(ctx context.Context, entryID string, templ
 }
 
 func (r *ScheduleRepo) rebuildBlockStates(ctx context.Context, entryID string, templateID string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
 	// Delete existing states
-	_, err := r.db.ExecContext(ctx,
+	_, err = tx.ExecContext(ctx,
 		`DELETE FROM time_block_states WHERE entry_id = ?`, entryID)
 	if err != nil {
-		return err
+		return fmt.Errorf("delete states: %w", err)
 	}
 
 	blocks, err := r.ListBlocks(ctx, templateID)
@@ -613,10 +628,10 @@ func (r *ScheduleRepo) rebuildBlockStates(ctx context.Context, entryID string, t
 	}
 	for _, b := range blocks {
 		if err := r.createBlockState(ctx, entryID, b.ID); err != nil {
-			return err
+			return fmt.Errorf("create block state: %w", err)
 		}
 	}
-	return nil
+	return tx.Commit()
 }
 
 // ---- For special days: store blocks inline ----

@@ -48,7 +48,8 @@ CREATE TABLE IF NOT EXISTS subtask_states (
     id TEXT PRIMARY KEY,
     time_block_state_id TEXT NOT NULL REFERENCES time_block_states(id) ON DELETE CASCADE,
     subtask_id TEXT NOT NULL,
-    done INTEGER NOT NULL DEFAULT 0
+    done INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(time_block_state_id, subtask_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_schedule_entries_date ON schedule_entries(date);

@@ -32,11 +32,10 @@ fun ScheduleScreen(
         topBar = {
             ScheduleTopBar(
                 currentDate = uiState.currentDate,
-                templateName = when {
-                    uiState.entry?.isSpecial == true -> "Özel Gün"
-                    uiState.entry?.templateName != null -> uiState.entry!!.templateName!!
-                    else -> "Şablon Seçin"
-                },
+                templateName = uiState.entry?.let { entry ->
+                if (entry.isSpecial) "Özel Gün"
+                else entry.templateName ?: "Şablon Seçin"
+            } ?: "Şablon Seçin",
                 onPreviousDay = viewModel::goToPreviousDay,
                 onNextDay = viewModel::goToNextDay,
                 onToday = viewModel::goToToday,
@@ -44,7 +43,8 @@ fun ScheduleScreen(
                 onTemplateClick = { showTemplatePicker = true }
             )
         }
-    ) { padding ->
+        ) { padding ->
+        val entry = uiState.entry
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -61,9 +61,9 @@ fun ScheduleScreen(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
-                uiState.entry != null -> {
+                entry != null -> {
                     ScheduleEntryContent(
-                        entry = uiState.entry!!,
+                        entry = entry,
                         onToggleSubtask = { blockId, subtaskId ->
                             viewModel.toggleSubtask(blockId, subtaskId)
                         },
@@ -195,7 +195,7 @@ fun ScheduleTopBar(
                 .padding(horizontal = 16.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.Center
         ) {
-            AssistantChip(
+            AssistChip(
                 onClick = onTemplateClick,
                 label = { Text(templateName) },
                 leadingIcon = {
@@ -228,7 +228,7 @@ fun ScheduleEntryContent(
             }
         }
 
-        items(entry.blocks) { block ->
+        items(entry.blocks, key = { it.timeBlockId }) { block ->
             TimeBlockCard(
                 block = block,
                 onToggleSubtask = { subtaskId -> onToggleSubtask(block.timeBlockId, subtaskId) },

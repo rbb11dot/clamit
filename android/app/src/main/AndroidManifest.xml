@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application
+        android:name=".ClamitApp"
         android:allowBackup="true"
         android:label="Clamit"
         android:supportsRtl="true"

@@ -4,7 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.clamit.data.model.*
 import com.clamit.data.repository.ScheduleRepository
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,8 +36,10 @@ class ScheduleViewModel(
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
                 val dateStr = _uiState.value.currentDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
-                val entry = repository.getEntry(dateStr)
-                val templates = repository.listTemplates()
+                val entryDeferred = async { repository.getEntry(dateStr) }
+                val templatesDeferred = async { repository.listTemplates() }
+                val entry = entryDeferred.await()
+                val templates = templatesDeferred.await()
                 _uiState.value = _uiState.value.copy(
                     entry = entry,
                     templates = templates,
@@ -83,8 +85,6 @@ class ScheduleViewModel(
             try {
                 val dateStr = _uiState.value.currentDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
                 repository.toggleSubtask(dateStr, blockId, subtaskId)
-                // Refresh to get updated state
-                delay(100)
                 load()
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(error = e.message)

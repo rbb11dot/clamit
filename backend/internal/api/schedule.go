@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/yourusername/clamit/internal/db"
 	"github.com/yourusername/clamit/internal/models"
@@ -42,6 +43,9 @@ func (h *ScheduleHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/schedule/{date}/template", h.setEntryTemplate)
 	mux.HandleFunc("POST /api/schedule/{date}/blocks", h.addSpecialBlock)
 	mux.HandleFunc("DELETE /api/schedule/{date}/blocks/{bid}", h.removeSpecialBlock)
+
+	// Create entry (POST to avoid GET side-effects)
+	mux.HandleFunc("POST /api/schedule/{date}", h.createEntry)
 
 	// Status
 	mux.HandleFunc("PUT /api/schedule/{date}/block/{bid}/toggle", h.toggleSubtask)
@@ -245,12 +249,34 @@ func (h *ScheduleHandler) reorderSubtasks(w http.ResponseWriter, r *http.Request
 
 func (h *ScheduleHandler) getEntry(w http.ResponseWriter, r *http.Request) {
 	date := r.PathValue("date")
+	if !validateDate(date) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid date"})
+		return
+	}
+	entry, err := h.repo.GetEntry(r.Context(), date)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if entry == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "entry not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, entry)
+}
+
+func (h *ScheduleHandler) createEntry(w http.ResponseWriter, r *http.Request) {
+	date := r.PathValue("date")
+	if !validateDate(date) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid date"})
+		return
+	}
 	entry, err := h.repo.GetOrCreateEntry(r.Context(), date)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, entry)
+	writeJSON(w, http.StatusCreated, entry)
 }
 
 func (h *ScheduleHandler) setEntryTemplate(w http.ResponseWriter, r *http.Request) {
@@ -333,6 +359,11 @@ func (h *ScheduleHandler) updateManualStatus(w http.ResponseWriter, r *http.Requ
 }
 
 // ---- Helpers ----
+
+func validateDate(date string) bool {
+	_, err := time.Parse("2006-01-02", date)
+	return err == nil
+}
 
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
