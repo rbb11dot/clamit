@@ -1,19 +1,27 @@
 package com.clamit.ui.schedule
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.clamit.data.model.DayTemplate
 import com.clamit.data.model.TimeBlock
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TemplatesPage(
@@ -27,34 +35,87 @@ fun TemplatesPage(
     Scaffold(
         topBar = {
             TopAppBar(
-                navigationIcon = { IconButton(onClick = onMenuClick) { Icon(Icons.Default.Menu, "Menü") } },
-                title = { Text("Gün Şablonları") }
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                ),
+                navigationIcon = {
+                    IconButton(onClick = onMenuClick) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menü")
+                    }
+                },
+                title = {
+                    Text(
+                        "Gün Şablonları",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onNewTemplate) { Icon(Icons.Default.Add, "Yeni şablon") }
+            ExtendedFloatingActionButton(
+                onClick = onNewTemplate,
+                shape = RoundedCornerShape(20.dp),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                elevation = FloatingActionButtonDefaults.elevation(6.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Yeni şablon")
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Yeni Şablon", fontWeight = FontWeight.Bold)
+            }
         }
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(MaterialTheme.colorScheme.background)
+                .padding(horizontal = 16.dp)
         ) {
-            items(uiState.templates, key = { it.id }) { t ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+            if (uiState.templates.isEmpty()) {
+                // Expressive Empty State
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(24.dp),
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.size(96.dp)
                     ) {
-                        Icon(ScheduleIcons.getIconOrDefault(t.icon), null, Modifier.size(32.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(t.name, style = MaterialTheme.typography.titleMedium)
-                            val days = t.repeatDays.joinToString(", ") { d ->
-                                listOf("Pazar","Pzt","Sal","Çar","Per","Cum","Cmt").getOrElse(d){"?"} }
-                            Text(days, style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("📋", fontSize = 44.sp)
                         }
-                        IconButton(onClick = { editingTemplate = t }) { Icon(Icons.Default.Edit, "Düzenle") }
+                    }
+                    Spacer(Modifier.height(20.dp))
+                    Text(
+                        "Henüz gün şablonu oluşturulmadı.",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Tekrarlayan rutinlerinizi tanımlamak için yeni bir şablon ekleyin.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(top = 12.dp, bottom = 88.dp)
+                ) {
+                    items(uiState.templates, key = { it.id }) { template ->
+                        TemplateCardItem(
+                            template = template,
+                            onEdit = { editingTemplate = template },
+                            onDelete = { viewModel.deleteTemplate(template.id) }
+                        )
                     }
                 }
             }
@@ -68,6 +129,116 @@ fun TemplatesPage(
             uiState = uiState,
             templateToEdit = editingTemplate
         )
+    }
+}
+
+@Composable
+private fun TemplateCardItem(
+    template: DayTemplate,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val dayAbbreviations = listOf("Pzr", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt")
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                RoundedCornerShape(20.dp)
+            ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Icon Tile
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = template.icon.ifBlank { "📋" },
+                            fontSize = 22.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                // Name & Block Count
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = template.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    val blockCountText = if (template.blocks.isNotEmpty()) {
+                        "${template.blocks.size} zaman bloğu"
+                    } else {
+                        "Blok henüz eklenmedi"
+                    }
+
+                    Text(
+                        text = blockCountText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Edit Button
+                IconButton(onClick = onEdit) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "Düzenle",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
+                // Delete Button
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Sil",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Days Row
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                dayAbbreviations.forEachIndexed { index, shortName ->
+                    val isSelected = index in template.repeatDays
+                    Surface(
+                        shape = CircleShape,
+                        color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer
+                        else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
+                    ) {
+                        Text(
+                            text = shortName,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -88,106 +259,102 @@ fun TemplateEditorPage(
             templateToEdit?.repeatDays?.let { addAll(it) }
         }
     }
-    val selectedBlockIds = remember(templateToEdit) {
-        mutableStateListOf<String>().apply {
-            templateToEdit?.blocks?.map { it.id }?.let { addAll(it) }
-        }
-    }
-    val dayNames = listOf("Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi")
 
-    val existingBlocks = remember(uiState.templates, templateToEdit) {
-        val blocksFromTemplates = uiState.templates.flatMap { it.blocks }
-        val blocksFromEditing = templateToEdit?.blocks ?: emptyList()
-        (blocksFromTemplates + blocksFromEditing).distinctBy { it.id }
-    }
+    val dayNames = listOf("Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi")
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (templateToEdit != null) "Şablonu Düzenle" else "Gün Şablonu Oluştur") },
-                navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.Default.ArrowBack, "Geri") } }
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                ),
+                title = {
+                    Text(
+                        if (templateToEdit != null) "Şablonu Düzenle" else "Gün Şablonu Oluştur",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Geri")
+                    }
+                }
             )
         }
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(MaterialTheme.colorScheme.background)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Icon
+            // Icon + Name
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconPickerButton(currentIcon = templateIcon) { templateIcon = it }
                     Spacer(Modifier.width(12.dp))
-                    OutlinedTextField(value = name, onValueChange = { name = it },
-                        label = { Text("Şablon adı") }, placeholder = { Text("Haftaiçi") },
-                        singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Şablon adı") },
+                        placeholder = { Text("Haftaiçi") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
 
-            // Days
+            // Days Selection Chips
             item {
-                Text("Tekrarlama günleri", fontWeight = FontWeight.Medium)
-                dayNames.forEachIndexed { index, dayName ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = index in selectedDays,
-                            onCheckedChange = { c -> if(c) selectedDays.add(index) else selectedDays.remove(index) }
-                        )
-                        Text(dayName)
-                    }
-                }
-            }
-
-            // Blocks (from existing templates)
-            item {
-                Text("Zaman blokları", fontWeight = FontWeight.Medium)
-            }
-            if (existingBlocks.isEmpty()) {
-                item {
-                    Text("Henüz blok yok. Önce bir şablona blok ekleyin.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            } else {
-                items(existingBlocks, key = { it.id }) { block ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                if (block.id in selectedBlockIds) {
-                                    selectedBlockIds.remove(block.id)
-                                } else {
-                                    selectedBlockIds.add(block.id)
-                                }
-                            }
-                    ) {
-                        Checkbox(
-                            checked = block.id in selectedBlockIds,
-                            onCheckedChange = { checked ->
-                                if (checked) selectedBlockIds.add(block.id)
-                                else selectedBlockIds.remove(block.id)
-                            }
-                        )
-                        Icon(
-                            ScheduleIcons.getIconOrDefault(block.icon),
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Column {
-                            Text(block.name, style = MaterialTheme.typography.bodyMedium)
-                            if (block.startTime.isNotBlank()) {
-                                val timeText = if (block.endTime != null) "${block.startTime} - ${block.endTime}" else "${block.startTime} (${block.durationMin ?: 0} dk)"
-                                Text(timeText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "Tekrarlama Günleri",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(8.dp))
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        dayNames.forEachIndexed { index, dayName ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        if (index in selectedDays) selectedDays.remove(index)
+                                        else selectedDays.add(index)
+                                    }
+                                    .padding(vertical = 4.dp, horizontal = 4.dp)
+                            ) {
+                                Checkbox(
+                                    checked = index in selectedDays,
+                                    onCheckedChange = { checked ->
+                                        if (checked) selectedDays.add(index)
+                                        else selectedDays.remove(index)
+                                    }
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    dayName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (index in selectedDays) FontWeight.Bold else FontWeight.Normal
+                                )
                             }
                         }
                     }
                 }
             }
 
-            // Save
+            // Save Action
             item {
+                Spacer(Modifier.height(8.dp))
                 Button(
                     onClick = {
                         if (templateToEdit != null) {
@@ -198,8 +365,17 @@ fun TemplateEditorPage(
                         onDismiss()
                     },
                     enabled = name.isNotBlank() && selectedDays.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text(if (templateToEdit != null) "Kaydet" else "Oluştur") }
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                ) {
+                    Text(
+                        if (templateToEdit != null) "Kaydet" else "Oluştur",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
     }

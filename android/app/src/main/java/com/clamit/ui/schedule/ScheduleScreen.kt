@@ -1,14 +1,21 @@
 package com.clamit.ui.schedule
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 
@@ -41,33 +48,125 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet(modifier = Modifier.width(280.dp)) {
-                Spacer(Modifier.height(24.dp))
-                Text("clamit", style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp))
-                HorizontalDivider()
+            ModalDrawerSheet(
+                drawerContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                drawerShape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp),
+                modifier = Modifier.width(300.dp)
+            ) {
+                Spacer(Modifier.height(16.dp))
+
+                // Expressive Drawer Header Card
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text("⚡", fontSize = 24.sp)
+                            }
+                        }
+                        Spacer(Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                "clamit",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "Second Brain",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                )
+                Spacer(Modifier.height(8.dp))
+
+                // Navigation Items
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.DateRange, contentDescription = null) },
-                    label = { Text("Schedule") },
+                    label = { Text("Schedule", fontWeight = FontWeight.SemiBold) },
                     selected = currentPage == SchedulePage.HOME,
-                    onClick = { currentPage = SchedulePage.HOME; scope.launch { drawerState.close() } }
+                    onClick = {
+                        currentPage = SchedulePage.HOME
+                        scope.launch { drawerState.close() }
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
                 )
+
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.FormatListBulleted, contentDescription = null) },
-                    label = { Text("Gün Şablonları") },
+                    label = { Text("Gün Şablonları", fontWeight = FontWeight.SemiBold) },
+                    badge = {
+                        if (uiState.templates.isNotEmpty()) {
+                            Badge { Text("${uiState.templates.size}") }
+                        }
+                    },
                     selected = currentPage == SchedulePage.TEMPLATES,
-                    onClick = { currentPage = SchedulePage.TEMPLATES; scope.launch { drawerState.close() } }
+                    onClick = {
+                        currentPage = SchedulePage.TEMPLATES
+                        scope.launch { drawerState.close() }
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
                 )
+
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.Timer, contentDescription = null) },
-                    label = { Text("Zaman Blokları") },
+                    label = { Text("Zaman Blokları", fontWeight = FontWeight.SemiBold) },
                     selected = currentPage == SchedulePage.BLOCKS,
-                    onClick = { currentPage = SchedulePage.BLOCKS; scope.launch { drawerState.close() } }
+                    onClick = {
+                        currentPage = SchedulePage.BLOCKS
+                        scope.launch { drawerState.close() }
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
                 )
+
                 Spacer(Modifier.weight(1f))
-                Text("v0.1.0", style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(28.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "clamit v0.1.0 • Termux Edition",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
         }
     ) {
@@ -80,12 +179,14 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
                 onTemplatePicker = { showTemplatePicker = true },
                 onAddBlock = { showBlockEditor = true }
             )
+
             SchedulePage.TEMPLATES -> TemplatesPage(
                 viewModel = viewModel,
                 uiState = uiState,
                 onMenuClick = { scope.launch { drawerState.open() } },
                 onNewTemplate = { showTemplateEditor = true }
             )
+
             SchedulePage.BLOCKS -> BlocksPage(
                 viewModel = viewModel,
                 uiState = uiState,
