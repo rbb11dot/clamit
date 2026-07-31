@@ -3,11 +3,11 @@ package models
 // ---- Day Template ----
 
 type DayTemplate struct {
-	ID         string    `json:"id"`
-	Name       string    `json:"name"`
-	Icon       string    `json:"icon"`
-	RepeatDays []int     `json:"repeatDays"`
-	CreatedAt  string    `json:"createdAt"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Icon       string `json:"icon"`
+	RepeatDays []int  `json:"repeatDays"`
+	CreatedAt  string `json:"createdAt"`
 }
 
 type CreateTemplateReq struct {
@@ -25,26 +25,26 @@ type UpdateTemplateReq struct {
 // ---- Time Block ----
 
 type TimeBlock struct {
-	ID           string    `json:"id"`
-	TemplateID   string    `json:"templateId"`
-	Name         string    `json:"name"`
-	Icon         string    `json:"icon"`
-	Mode         string    `json:"mode"` // "start_end" | "start_duration"
-	StartTime    string    `json:"startTime"`
-	EndTime      *string   `json:"endTime,omitempty"`
-	DurationMin  *int      `json:"durationMin,omitempty"`
-	BlockOrder   int       `json:"blockOrder"`
-	Subtasks     []Subtask `json:"subtasks,omitempty"`
-	CreatedAt    string    `json:"createdAt"`
+	ID          string    `json:"id"`
+	TemplateID  string    `json:"templateId"`
+	Name        string    `json:"name"`
+	Icon        string    `json:"icon"`
+	Mode        string    `json:"mode"` // "start_end" | "start_duration"
+	StartTime   string    `json:"startTime"`
+	EndTime     *string   `json:"endTime,omitempty"`
+	DurationMin *int      `json:"durationMin,omitempty"`
+	BlockOrder  int       `json:"blockOrder"`
+	Subtasks    []Subtask `json:"subtasks,omitempty"`
+	CreatedAt   string    `json:"createdAt"`
 }
 
 type CreateBlockReq struct {
-	Name        string     `json:"name"`
-	Icon        string     `json:"icon"`
-	Mode        string     `json:"mode"`
-	StartTime   string     `json:"startTime"`
-	EndTime     *string    `json:"endTime,omitempty"`
-	DurationMin *int       `json:"durationMin,omitempty"`
+	Name        string       `json:"name"`
+	Icon        string       `json:"icon"`
+	Mode        string       `json:"mode"`
+	StartTime   string       `json:"startTime"`
+	EndTime     *string      `json:"endTime,omitempty"`
+	DurationMin *int         `json:"durationMin,omitempty"`
 	Subtasks    []SubtaskReq `json:"subtasks,omitempty"`
 }
 
@@ -80,36 +80,36 @@ type UpdateSubtaskReq struct {
 // ---- Schedule Entry ----
 
 type ScheduleEntry struct {
-	ID           string         `json:"id"`
-	Date         string         `json:"date"`
-	TemplateID   *string        `json:"templateId,omitempty"`
-	TemplateName *string        `json:"templateName,omitempty"`
-	IsSpecial    bool           `json:"isSpecial"`
-	Blocks       []BlockState   `json:"blocks,omitempty"`
-	CreatedAt    string      `json:"createdAt"`
+	ID           string       `json:"id"`
+	Date         string       `json:"date"`
+	TemplateID   *string      `json:"templateId,omitempty"`
+	TemplateName *string      `json:"templateName,omitempty"`
+	IsSpecial    bool         `json:"isSpecial"`
+	Blocks       []BlockState `json:"blocks,omitempty"`
+	CreatedAt    string       `json:"createdAt"`
 }
 
 type BlockState struct {
-	ID             string            `json:"id"`
-	TimeBlockID    string            `json:"timeBlockId"`
-	Name           string            `json:"name"`
-	Icon           string            `json:"icon"`
-	StartTime      string            `json:"startTime"`
-	EndTime        *string           `json:"endTime,omitempty"`
-	DurationMin    *int              `json:"durationMin,omitempty"`
-	Mode           string            `json:"mode"`
-	BlockOrder     int               `json:"blockOrder"`
-	AutoStatus     string            `json:"autoStatus"`
-	ManualStatus   string            `json:"manualStatus"`
-	SubtaskStates  []SubtaskState    `json:"subtaskStates,omitempty"`
+	ID            string         `json:"id"`
+	TimeBlockID   string         `json:"timeBlockId"`
+	Name          string         `json:"name"`
+	Icon          string         `json:"icon"`
+	StartTime     string         `json:"startTime"`
+	EndTime       *string        `json:"endTime,omitempty"`
+	DurationMin   *int           `json:"durationMin,omitempty"`
+	Mode          string         `json:"mode"`
+	BlockOrder    int            `json:"blockOrder"`
+	AutoStatus    string         `json:"autoStatus"`
+	ManualStatus  string         `json:"manualStatus"`
+	SubtaskStates []SubtaskState `json:"subtaskStates,omitempty"`
 }
 
 type SubtaskState struct {
-	ID       string `json:"id"`
+	ID        string `json:"id"`
 	SubtaskID string `json:"subtaskId"`
-	Name     string `json:"name"`
-	Done     bool   `json:"done"`
-	Order    int    `json:"order"`
+	Name      string `json:"name"`
+	Done      bool   `json:"done"`
+	Order     int    `json:"order"`
 }
 
 type UpdateManualStatusReq struct {

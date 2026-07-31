@@ -111,7 +111,7 @@ fun TimeBlockCard(
                     )
 
                     val durationText = when {
-                        block.mode == "start_end" && !block.endTime.isNull me.isBlank() ->
+                        block.mode == "start_end" && !block.endTime.isNullOrBlank() ->
                             "${block.startTime} - ${block.endTime}"
                         block.durationMin != null ->
                             "${block.startTime} • ${block.durationMin} dakika"
