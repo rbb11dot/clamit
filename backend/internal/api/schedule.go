@@ -286,6 +286,10 @@ func (h *ScheduleHandler) createEntry(w http.ResponseWriter, r *http.Request) {
 
 func (h *ScheduleHandler) setEntryTemplate(w http.ResponseWriter, r *http.Request) {
 	date := r.PathValue("date")
+	if !validateDate(date) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid date"})
+		return
+	}
 	var req models.SetTemplateReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
@@ -301,6 +305,10 @@ func (h *ScheduleHandler) setEntryTemplate(w http.ResponseWriter, r *http.Reques
 
 func (h *ScheduleHandler) addSpecialBlock(w http.ResponseWriter, r *http.Request) {
 	date := r.PathValue("date")
+	if !validateDate(date) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid date"})
+		return
+	}
 	var req struct {
 		BlockID string `json:"blockId"`
 	}
@@ -317,6 +325,10 @@ func (h *ScheduleHandler) addSpecialBlock(w http.ResponseWriter, r *http.Request
 
 func (h *ScheduleHandler) removeSpecialBlock(w http.ResponseWriter, r *http.Request) {
 	date := r.PathValue("date")
+	if !validateDate(date) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid date"})
+		return
+	}
 	bid := r.PathValue("bid")
 	if err := h.repo.RemoveSpecialBlock(r.Context(), date, bid); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -329,6 +341,10 @@ func (h *ScheduleHandler) removeSpecialBlock(w http.ResponseWriter, r *http.Requ
 
 func (h *ScheduleHandler) toggleSubtask(w http.ResponseWriter, r *http.Request) {
 	date := r.PathValue("date")
+	if !validateDate(date) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid date"})
+		return
+	}
 	bid := r.PathValue("bid")
 	var req struct {
 		SubtaskID string `json:"subtaskId"`
@@ -346,6 +362,10 @@ func (h *ScheduleHandler) toggleSubtask(w http.ResponseWriter, r *http.Request) 
 
 func (h *ScheduleHandler) updateManualStatus(w http.ResponseWriter, r *http.Request) {
 	date := r.PathValue("date")
+	if !validateDate(date) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid date"})
+		return
+	}
 	bid := r.PathValue("bid")
 	var req models.UpdateManualStatusReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

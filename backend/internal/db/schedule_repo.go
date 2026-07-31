@@ -523,9 +523,9 @@ func (r *ScheduleRepo) findTemplateForDate(ctx context.Context, dateStr string) 
 	return nil, nil
 }
 
-func (r *ScheduleRepo) createBlockState(ctx context.Context, entryID string, blockID string) error {
+func (r *ScheduleRepo) createBlockStateTx(ctx context.Context, tx *sql.Tx, entryID string, blockID string) error {
 	id := uuid.New().String()
-	_, err := r.db.ExecContext(ctx,
+	_, err := tx.ExecContext(ctx,
 		`INSERT INTO time_block_states (id, entry_id, time_block_id) VALUES (?, ?, ?)`,
 		id, entryID, blockID)
 	if err != nil {
@@ -539,7 +539,7 @@ func (r *ScheduleRepo) createBlockState(ctx context.Context, entryID string, blo
 	}
 	for _, s := range subtasks {
 		sid := uuid.New().String()
-		_, err := r.db.ExecContext(ctx,
+		_, err := tx.ExecContext(ctx,
 			`INSERT INTO subtask_states (id, time_block_state_id, subtask_id) VALUES (?, ?, ?)`,
 			sid, id, s.ID)
 		if err != nil {
@@ -547,6 +547,18 @@ func (r *ScheduleRepo) createBlockState(ctx context.Context, entryID string, blo
 		}
 	}
 	return nil
+}
+
+func (r *ScheduleRepo) createBlockState(ctx context.Context, entryID string, blockID string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := r.createBlockStateTx(ctx, tx, entryID, blockID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *ScheduleRepo) getBlockStates(ctx context.Context, entryID string, templateID *string) ([]models.BlockState, error) {
@@ -586,21 +598,31 @@ func (r *ScheduleRepo) getBlockStates(ctx context.Context, entryID string, templ
 
 		if stateID.Valid {
 			bs.ID = stateID.String
-			// Load subtask states
-			subRows, err := r.db.QueryContext(ctx,
-				`SELECT ss.id, ss.subtask_id, s.name, ss.done, s.subtask_order
-				 FROM subtask_states ss
-				 JOIN subtasks s ON ss.subtask_id = s.id
-				 WHERE ss.time_block_state_id = ?
-				 ORDER BY s.subtask_order`, stateID.String)
-			if err == nil {
-				for subRows.Next() {
-					var st models.SubtaskState
-					subRows.Scan(&st.ID, &st.SubtaskID, &st.Name, &st.Done, &st.Order)
-					bs.SubtaskStates = append(bs.SubtaskStates, st)
-				}
-				subRows.Close()
+		}
+
+		var subRows *sql.Rows
+		var subErr error
+		if stateID.Valid {
+			subRows, subErr = r.db.QueryContext(ctx,
+				`SELECT COALESCE(ss.id, ''), s.id, s.name, COALESCE(ss.done, 0), s.subtask_order
+				 FROM subtasks s
+				 LEFT JOIN subtask_states ss ON ss.subtask_id = s.id AND ss.time_block_state_id = ?
+				 WHERE s.time_block_id = ?
+				 ORDER BY s.subtask_order`, stateID.String, bs.TimeBlockID)
+		} else {
+			subRows, subErr = r.db.QueryContext(ctx,
+				`SELECT '', id, name, 0, subtask_order
+				 FROM subtasks
+				 WHERE time_block_id = ?
+				 ORDER BY subtask_order`, bs.TimeBlockID)
+		}
+		if subErr == nil {
+			for subRows.Next() {
+				var st models.SubtaskState
+				subRows.Scan(&st.ID, &st.SubtaskID, &st.Name, &st.Done, &st.Order)
+				bs.SubtaskStates = append(bs.SubtaskStates, st)
 			}
+			subRows.Close()
 		}
 
 		blocks = append(blocks, bs)
@@ -627,7 +649,7 @@ func (r *ScheduleRepo) rebuildBlockStates(ctx context.Context, entryID string, t
 		return err
 	}
 	for _, b := range blocks {
-		if err := r.createBlockState(ctx, entryID, b.ID); err != nil {
+		if err := r.createBlockStateTx(ctx, tx, entryID, b.ID); err != nil {
 			return fmt.Errorf("create block state: %w", err)
 		}
 	}
