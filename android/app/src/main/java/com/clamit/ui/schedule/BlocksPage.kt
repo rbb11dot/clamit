@@ -260,10 +260,11 @@ fun BlockEditorPage(
     val templates = uiState.templates
 
     // Auto-resolve templateId under the hood (Point 3: NO template selection UI shown to user)
-    val resolvedTemplateId = remember(targetTemplateId, uiState) {
+    val entryTemplateId = uiState.entry?.templateId
+    val resolvedTemplateId = remember(targetTemplateId, entryTemplateId, templates) {
         when {
             !targetTemplateId.isNullOrBlank() -> targetTemplateId
-            uiState.entry?.templateId != null -> uiState.entry.templateId!!
+            entryTemplateId != null -> entryTemplateId
             templates.isNotEmpty() -> templates.first().id
             else -> ""
         }
