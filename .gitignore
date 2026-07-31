@@ -41,6 +41,11 @@ Thumbs.db
 .env.local
 .env.*.local
 
+## Local / personal (not for the public repo)
+.agent-memory/
+backend-bin/
+clamit-backend/
+
 ## Agent
 agent_docs/*.md
 !agent_docs/architecture.md
