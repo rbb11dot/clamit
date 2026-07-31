@@ -87,7 +87,12 @@ fun TemplatesPage(
                         modifier = Modifier.size(96.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text("📋", fontSize = 44.sp)
+                            Icon(
+                                Icons.Default.FormatListBulleted,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(36.dp)
+                            )
                         }
                     }
                     Spacer(Modifier.height(20.dp))
@@ -163,9 +168,11 @@ private fun TemplateCardItem(
                     modifier = Modifier.size(44.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = template.icon.ifBlank { "📋" },
-                            fontSize = 22.sp
+                        Icon(
+                            imageVector = ScheduleIcons.getIconOrDefault(template.icon),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }

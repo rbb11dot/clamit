@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -64,7 +65,7 @@ fun TemplatePickerDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(24.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         title = {
             Text(
                 "Gün Şablonu Seç",
@@ -73,104 +74,49 @@ fun TemplatePickerDialog(
             )
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                // Option 1: Special Day / No Template
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = if (currentTemplateId == null) MaterialTheme.colorScheme.primaryContainer
-                    else MaterialTheme.colorScheme.surfaceContainerLow,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable {
-                            viewModel.setEntryTemplate(null)
-                            onDismiss()
-                        }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.secondaryContainer,
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text("✨", fontSize = 18.sp)
-                            }
-                        }
-                        Spacer(Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Özel Gün / Şablonsuz",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "Bağımsız özel bloklar kullanın",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        if (currentTemplateId == null) {
-                            Icon(
-                                Icons.Default.Check,
-                                contentDescription = "Seçili",
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                        }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Option 1: no template (special day)
+                TemplatePickerRow(
+                    icon = { Icon(Icons.Default.EditCalendar, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                    title = "Özel Gün",
+                    subtitle = "Şablon kullanmadan özel bloklar",
+                    selected = currentTemplateId == null,
+                    onClick = {
+                        viewModel.setEntryTemplate(null)
+                        onDismiss()
                     }
-                }
+                )
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 4.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
 
-                // Options: Existing templates
-                uiState.templates.forEach { template ->
-                    val isSelected = currentTemplateId == template.id
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = if (isSelected) MaterialTheme.colorScheme.primaryContainer
-                        else MaterialTheme.colorScheme.surfaceContainerLow,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .clickable {
+                if (uiState.templates.isEmpty()) {
+                    Text(
+                        "Henüz şablon yok. Gün Şablonları sayfasından oluşturabilirsiniz.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                } else {
+                    uiState.templates.forEach { template ->
+                        TemplatePickerRow(
+                            icon = {
+                                Icon(
+                                    ScheduleIcons.getIconOrDefault(template.icon),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            },
+                            title = template.name,
+                            subtitle = "${template.blocks.size} zaman bloğu",
+                            selected = currentTemplateId == template.id,
+                            onClick = {
                                 viewModel.setEntryTemplate(template.id)
                                 onDismiss()
                             }
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.tertiaryContainer,
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = template.icon.ifBlank { "📋" },
-                                        fontSize = 18.sp
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.width(12.dp))
-                            Text(
-                                text = template.name,
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f)
-                            )
-                            if (isSelected) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = "Seçili",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        }
+                        )
                     }
                 }
             }
@@ -179,4 +125,58 @@ fun TemplatePickerDialog(
             TextButton(onClick = onDismiss) { Text("Kapat") }
         }
     )
+}
+
+@Composable
+private fun TemplatePickerRow(
+    icon: @Composable () -> Unit,
+    title: String,
+    subtitle: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+        else MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    icon()
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (selected) {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = "Seçili",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
 }

@@ -15,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -34,7 +33,7 @@ fun ScheduleHomePage(
     onTemplatePicker: () -> Unit,
     onAddBlock: () -> Unit
 ) {
-    val formatter = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale("tr"))
+    val monthFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale("tr"))
     val dayFormatter = DateTimeFormatter.ofPattern("EEEE", Locale("tr"))
 
     val activeTemplateName = uiState.entry?.templateName
@@ -44,7 +43,7 @@ fun ScheduleHomePage(
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                    containerColor = MaterialTheme.colorScheme.surface
                 ),
                 navigationIcon = {
                     IconButton(onClick = onMenuClick) {
@@ -52,36 +51,22 @@ fun ScheduleHomePage(
                     }
                 },
                 title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text("⚡", fontSize = 16.sp)
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "clamit",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
+                    Text(
+                        "clamit",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = (-0.3).sp
+                    )
                 },
                 actions = {
-                    // Template Chip Button
+                    // Template chip
                     FilterChip(
                         selected = true,
                         onClick = onTemplatePicker,
                         label = {
                             Text(
                                 activeTemplateName,
-                                style = MaterialTheme.typography.labelMedium,
+                                style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.SemiBold
                             )
                         },
@@ -89,39 +74,35 @@ fun ScheduleHomePage(
                             Icon(
                                 Icons.Default.Schedule,
                                 contentDescription = "Şablon seç",
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(15.dp)
                             )
                         },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            selectedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            selectedLabelColor = MaterialTheme.colorScheme.onSurface
                         ),
-                        border = null
-                    )
-
-                    Spacer(modifier = Modifier.width(4.dp))
-
-                    IconButton(onClick = viewModel::goToToday) {
-                        Icon(
-                            Icons.Default.CalendarToday,
-                            contentDescription = "Bugün",
-                            tint = MaterialTheme.colorScheme.primary
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = true,
+                            borderColor = MaterialTheme.colorScheme.outlineVariant
                         )
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    IconButton(onClick = viewModel::goToToday) {
+                        Icon(Icons.Default.Today, contentDescription = "Bugün")
                     }
                 }
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
+            FloatingActionButton(
                 onClick = onAddBlock,
-                shape = RoundedCornerShape(20.dp),
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                elevation = FloatingActionButtonDefaults.elevation(6.dp)
+                shape = RoundedCornerShape(18.dp),
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                elevation = FloatingActionButtonDefaults.elevation(4.dp)
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Blok ekle")
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Blok Ekle", fontWeight = FontWeight.Bold)
             }
         }
     ) { padding ->
@@ -131,68 +112,83 @@ fun ScheduleHomePage(
                 .padding(padding)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // Dedicated Expressive Date Navigation Bar (Guarantees BOTH < and > arrows are prominent)
+            // ===== Date band: prev — big day numeral + month/year + weekday — next =====
             Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                color = MaterialTheme.colorScheme.surfaceContainerLow,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .padding(horizontal = 16.dp, vertical = 6.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .border(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant,
+                        RoundedCornerShape(20.dp)
+                    )
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 10.dp)
                 ) {
-                    FilledTonalIconButton(
+                    // Prev day
+                    IconButton(
                         onClick = viewModel::goToPreviousDay,
-                        modifier = Modifier.size(40.dp),
-                        shape = CircleShape
+                        modifier = Modifier.size(42.dp)
                     ) {
                         Icon(
                             Icons.Default.ArrowBack,
-                            contentDescription = "Önceki",
-                            modifier = Modifier.size(20.dp)
+                            contentDescription = "Önceki gün",
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
-                    Column(
+                    // Date core
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .weight(1f)
                             .clickable(onClick = onDatePicker)
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
+                            .padding(horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = uiState.currentDate.format(formatter),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center,
+                            text = uiState.currentDate.dayOfMonth.toString().padStart(2, '0'),
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = (-1).sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        Text(
-                            text = uiState.currentDate.format(dayFormatter),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold,
-                            textAlign = TextAlign.Center
-                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(horizontalAlignment = Alignment.Start) {
+                            Text(
+                                text = uiState.currentDate.format(monthFormatter),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = uiState.currentDate.format(dayFormatter),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
 
-                    FilledTonalIconButton(
+                    // Next day
+                    IconButton(
                         onClick = viewModel::goToNextDay,
-                        modifier = Modifier.size(40.dp),
-                        shape = CircleShape
+                        modifier = Modifier.size(42.dp)
                     ) {
                         Icon(
                             Icons.Default.ArrowForward,
-                            contentDescription = "Sonraki",
-                            modifier = Modifier.size(20.dp)
+                            contentDescription = "Sonraki gün",
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
             }
 
+            // ===== Content =====
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -200,21 +196,10 @@ fun ScheduleHomePage(
             ) {
                 when {
                     uiState.isLoading -> {
-                        Column(
+                        CircularProgressIndicator(
                             modifier = Modifier.align(Alignment.Center),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            CircularProgressIndicator(
-                                color = MaterialTheme.colorScheme.primary,
-                                trackColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                "Gün yükleniyor...",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
 
                     uiState.error != null -> {
@@ -222,31 +207,23 @@ fun ScheduleHomePage(
                             modifier = Modifier.align(Alignment.Center),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.errorContainer,
-                                modifier = Modifier.size(56.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Default.Warning,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onErrorContainer
-                                    )
-                                }
-                            }
-                            Spacer(Modifier.height(16.dp))
+                            Icon(
+                                Icons.Default.WifiOff,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(40.dp)
+                            )
+                            Spacer(Modifier.height(12.dp))
                             Text(
-                                text = "Hata oluştu",
+                                "Hata oluştu",
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                fontWeight = FontWeight.Bold
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
                                 text = uiState.error,
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.error,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
                             )
                             Spacer(Modifier.height(16.dp))
@@ -254,7 +231,7 @@ fun ScheduleHomePage(
                                 onClick = viewModel::load,
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(8.dp))
                                 Text("Tekrar Dene")
                             }
@@ -266,41 +243,11 @@ fun ScheduleHomePage(
                         if (entry == null) {
                             Text("Yükleniyor...", Modifier.align(Alignment.Center))
                         } else if (entry.blocks.isEmpty()) {
-                            // Material 3 Expressive Empty State
-                            Column(
-                                modifier = Modifier
-                                    .align(Alignment.Center)
-                                    .padding(24.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Surface(
-                                    shape = RoundedCornerShape(24.dp),
-                                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    modifier = Modifier.size(96.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text("☕", fontSize = 44.sp)
-                                    }
-                                }
-                                Spacer(Modifier.height(20.dp))
-                                Text(
-                                    "Bu gün için zaman bloğu yok.",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    "+ butonuna basarak yeni bir zaman bloğu ekleyin veya yukarıdan bir şablon seçin.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
+                            EmptyDayState(onAddBlock = onAddBlock)
                         } else {
                             LazyColumn(
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                                contentPadding = PaddingValues(top = 12.dp, bottom = 88.dp)
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                contentPadding = PaddingValues(top = 10.dp, bottom = 96.dp)
                             ) {
                                 items(entry.blocks, key = { it.timeBlockId }) { block ->
                                     TimeBlockCard(
@@ -315,6 +262,53 @@ fun ScheduleHomePage(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun EmptyDayState(onAddBlock: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Surface(
+            shape = RoundedCornerShape(22.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            modifier = Modifier.size(72.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Default.Event,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+        }
+        Spacer(Modifier.height(20.dp))
+        Text(
+            "Bu gün için zaman bloğu yok.",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Bir şablon seçin ya da aşağıdaki + butonuyla blok ekleyin.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(16.dp))
+        TextButton(onClick = onAddBlock) {
+            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Blok Ekle", fontWeight = FontWeight.SemiBold)
         }
     }
 }

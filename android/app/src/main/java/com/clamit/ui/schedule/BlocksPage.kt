@@ -93,7 +93,12 @@ fun BlocksPage(
                         modifier = Modifier.size(96.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text("⏱️", fontSize = 44.sp)
+                            Icon(
+                                Icons.Default.Timer,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(36.dp)
+                            )
                         }
                     }
                     Spacer(Modifier.height(20.dp))
@@ -159,9 +164,11 @@ private fun TimeBlockListItem(
                     modifier = Modifier.size(44.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = block.icon.ifBlank { "⏱️" },
-                            fontSize = 22.sp
+                        Icon(
+                            imageVector = ScheduleIcons.getIconOrDefault(block.icon),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
