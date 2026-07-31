@@ -57,7 +57,7 @@ fun TimeBlockCard(
         label = "stopBg"
     )
     val animatedElevation by animateDpAsState(
-        targetValue = if (isInProgress) 3.dp else 0.dp,
+        targetValue = if (isInProgress) 2.dp else 0.dp,
         label = "stopElevation"
     )
 

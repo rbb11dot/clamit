@@ -16,12 +16,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.clamit.data.model.TimeBlock
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,6 +38,8 @@ fun BlocksPage(
             template.blocks.map { block -> template to block }
         }
     }
+
+    var blockToDelete by remember { mutableStateOf<TimeBlock?>(null) }
 
     Scaffold(
         topBar = {
@@ -79,6 +82,8 @@ fun BlocksPage(
                 .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 16.dp)
         ) {
+            ErrorBanner(error = uiState.error, onDismiss = viewModel::clearError)
+
             if (allBlocksWithTemplates.isEmpty()) {
                 // Expressive Empty State
                 Column(
@@ -114,7 +119,7 @@ fun BlocksPage(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        textAlign = TextAlign.Center
                     )
                 }
             } else {
@@ -126,12 +131,35 @@ fun BlocksPage(
                         TimeBlockListItem(
                             block = block,
                             templateName = template.name,
-                            onDelete = { viewModel.deleteBlock(block.id) }
+                            onDelete = { blockToDelete = block }
                         )
                     }
                 }
             }
         }
+    }
+
+    blockToDelete?.let { block ->
+        AlertDialog(
+            onDismissRequest = { blockToDelete = null },
+            title = { Text("Bloğu sil", fontWeight = FontWeight.Bold) },
+            text = { Text("\"${block.name}\" şablonundan silinecek. Bu işlem geri alınamaz.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteBlock(block.id)
+                        blockToDelete = null
+                    }
+                ) {
+                    Text("Sil", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { blockToDelete = null }) {
+                    Text("Vazgeç")
+                }
+            }
+        )
     }
 }
 
@@ -256,27 +284,17 @@ private fun TimeBlockListItem(
 
 // ---- Full Screen Block Editor ----
 
+/** Draft row with a stable id so LazyColumn keys keep focus/cursor on the row,
+ *  not the position, after a reorder. */
+private data class SubtaskDraft(val id: Long, val text: String)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BlockEditorPage(
     onDismiss: () -> Unit,
     viewModel: ScheduleViewModel,
-    targetTemplateId: String? = null
+    addToCurrentDay: Boolean = false
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val templates = uiState.templates
-
-    // Auto-resolve templateId under the hood (Point 3: NO template selection UI shown to user)
-    val entryTemplateId = uiState.entry?.templateId
-    val resolvedTemplateId = remember(targetTemplateId, entryTemplateId, templates) {
-        when {
-            !targetTemplateId.isNullOrBlank() -> targetTemplateId
-            entryTemplateId != null -> entryTemplateId
-            templates.isNotEmpty() -> templates.first().id
-            else -> ""
-        }
-    }
-
     var name by remember { mutableStateOf("") }
     var blockIcon by remember { mutableStateOf("alarm") }
     var mode by remember { mutableStateOf("start_end") }
@@ -285,15 +303,73 @@ fun BlockEditorPage(
     var endHour by remember { mutableStateOf("07") }
     var endMin by remember { mutableStateOf("30") }
     var duration by remember { mutableStateOf("30") }
-    var subtasks by remember { mutableStateOf(listOf("")) }
+    var subtasks by remember { mutableStateOf(listOf(SubtaskDraft(0, ""))) }
+    var nextSubtaskId by remember { mutableLongStateOf(1L) }
+    var saving by remember { mutableStateOf(false) }
+    var validationError by remember { mutableStateOf<String?>(null) }
 
-    // Helper for reordering subtasks (Point 4)
+    val scope = rememberCoroutineScope()
+
+    // Time field validation (Saat 0-23, Dakika 0-59, Süre > 0)
+    val startH = startHour.toIntOrNull()
+    val startM = startMin.toIntOrNull()
+    val endH = endHour.toIntOrNull()
+    val endM = endMin.toIntOrNull()
+    val dur = duration.toIntOrNull()
+    val timeValid = startH != null && startH in 0..23 &&
+        startM != null && startM in 0..59 &&
+        (mode != "start_end" || (endH != null && endH in 0..23 && endM != null && endM in 0..59)) &&
+        (mode != "start_duration" || (dur != null && dur > 0))
+
     fun moveSubtask(fromIndex: Int, toIndex: Int) {
         if (toIndex in subtasks.indices && fromIndex in subtasks.indices) {
             val list = subtasks.toMutableList()
             val item = list.removeAt(fromIndex)
             list.add(toIndex, item)
             subtasks = list
+        }
+    }
+
+    fun save() {
+        if (saving) return
+        if (!timeValid) {
+            validationError = "Geçersiz saat. Saat 0-23, dakika 0-59 arasında olmalı."
+            return
+        }
+        validationError = null
+        saving = true
+        scope.launch {
+            val st = "${startHour.padStart(2, '0')}:${startMin.padStart(2, '0')}"
+            val et = if (mode == "start_end") "${endHour.padStart(2, '0')}:${endMin.padStart(2, '0')}" else null
+            val durMin = if (mode == "start_duration") dur else null
+
+            // Sequential save: resolve/create the template FIRST, then create the block
+            // with the real template id — never a fire-and-forget createTemplate followed
+            // by a synchronous read of the stale template list.
+            val templateId = viewModel.ensureTemplateId()
+            val blockId = if (templateId != null) {
+                viewModel.createBlockSuspended(
+                    templateId,
+                    name.trim(),
+                    blockIcon,
+                    mode,
+                    st,
+                    et,
+                    durMin,
+                    subtasks.map { it.text }.filter { it.isNotBlank() }
+                )
+            } else {
+                null
+            }
+
+            // Opened from the home page FAB: the new block must land on the current day.
+            if (blockId != null && addToCurrentDay) {
+                viewModel.addSpecialBlockToCurrentDaySuspended(blockId)
+            }
+
+            saving = false
+            if (blockId != null) onDismiss()
+            // On failure uiState.error is set by the ViewModel; the editor stays open for retry.
         }
     }
 
@@ -449,7 +525,7 @@ fun BlockEditorPage(
                 }
             }
 
-            // Subtasks & Reordering (Point 4)
+            // Subtasks & Reordering
             item {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -462,14 +538,14 @@ fun BlockEditorPage(
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "${subtasks.filter { it.isNotBlank() }.size} adet",
+                        "${subtasks.count { it.text.isNotBlank() }} adet",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
 
-            itemsIndexed(subtasks, key = { index, _ -> index }) { index, subtaskText ->
+            itemsIndexed(subtasks, key = { _, draft -> draft.id }) { index, subtask ->
                 Card(
                     shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
@@ -499,11 +575,9 @@ fun BlockEditorPage(
 
                         // TextField
                         OutlinedTextField(
-                            value = subtaskText,
+                            value = subtask.text,
                             onValueChange = { n ->
-                                val list = subtasks.toMutableList()
-                                list[index] = n
-                                subtasks = list
+                                subtasks = subtasks.map { if (it.id == subtask.id) it.copy(text = n) else it }
                             },
                             placeholder = { Text("Subtask ${index + 1}") },
                             singleLine = true,
@@ -543,9 +617,7 @@ fun BlockEditorPage(
                         if (subtasks.size > 1) {
                             IconButton(
                                 onClick = {
-                                    val list = subtasks.toMutableList()
-                                    list.removeAt(index)
-                                    subtasks = list
+                                    subtasks = subtasks.filterNot { it.id == subtask.id }
                                 },
                                 modifier = Modifier.size(32.dp)
                             ) {
@@ -562,7 +634,10 @@ fun BlockEditorPage(
 
             item {
                 OutlinedButton(
-                    onClick = { subtasks = subtasks + "" },
+                    onClick = {
+                        subtasks = subtasks + SubtaskDraft(nextSubtaskId, "")
+                        nextSubtaskId++
+                    },
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -572,41 +647,71 @@ fun BlockEditorPage(
                 }
             }
 
+            // Validation feedback
+            validationError?.let { msg ->
+                item {
+                    Text(
+                        text = msg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
             // Save Action
             item {
                 Spacer(Modifier.height(8.dp))
                 Button(
-                    onClick = {
-                        val st = "${startHour.padStart(2, '0')}:${startMin.padStart(2, '0')}"
-                        val et = if (mode == "start_end") "${endHour.padStart(2, '0')}:${endMin.padStart(2, '0')}" else null
-                        val dur = if (mode == "start_duration") duration.toIntOrNull() else null
-
-                        // If no template exists yet, create a default template first
-                        val targetId = if (resolvedTemplateId.isNotBlank()) {
-                            resolvedTemplateId
-                        } else {
-                            viewModel.createTemplate("Genel Şablon", "calendar_today", listOf(0, 1, 2, 3, 4, 5, 6))
-                            uiState.templates.firstOrNull()?.id ?: ""
-                        }
-
-                        viewModel.createBlock(
-                            targetId,
-                            name,
-                            blockIcon,
-                            mode,
-                            st,
-                            et,
-                            dur,
-                            subtasks.filter { it.isNotBlank() }
-                        )
-                        onDismiss()
-                    },
-                    enabled = name.isNotBlank(),
+                    onClick = ::save,
+                    enabled = name.isNotBlank() && timeValid && !saving,
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth().height(48.dp)
                 ) {
-                    Text("Kaydet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    if (saving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            strokeWidth = 2.5.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text("Kaydediliyor…", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    } else {
+                        Text("Kaydet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    }
                 }
+            }
+        }
+    }
+}
+
+/** Shared dismissible error banner used on list pages. */
+@Composable
+fun ErrorBanner(error: String?, onDismiss: () -> Unit) {
+    if (error == null) return
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer
+        ),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 16.dp, top = 4.dp, end = 4.dp, bottom = 4.dp)
+        ) {
+            Icon(Icons.Default.ErrorOutline, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Close, contentDescription = "Kapat", modifier = Modifier.size(18.dp))
             }
         }
     }

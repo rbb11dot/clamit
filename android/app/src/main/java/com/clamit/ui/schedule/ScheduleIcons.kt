@@ -58,6 +58,7 @@ object ScheduleIcons {
         "work" to Icons.Default.Work,
         "shower" to Icons.Default.Shower,
         "bedtime" to Icons.Default.Bedtime,
+        "calendar_today" to Icons.Default.Event,
         "cleaning_services" to Icons.Default.CleaningServices,
         "headphones" to Icons.Default.Headphones,
         "account_circle" to Icons.Default.AccountCircle,

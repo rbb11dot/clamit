@@ -59,34 +59,37 @@ fun ScheduleHomePage(
                     )
                 },
                 actions = {
-                    // Template chip
-                    FilterChip(
-                        selected = true,
+                    // Template chip: tappable label showing the active template name.
+                    // A plain surface — FilterChip's selected state has no meaning here.
+                    Surface(
                         onClick = onTemplatePicker,
-                        label = {
-                            Text(
-                                activeTemplateName,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        },
-                        leadingIcon = {
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant
+                        ),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp)
+                        ) {
                             Icon(
                                 Icons.Default.Schedule,
                                 contentDescription = "Şablon seç",
-                                modifier = Modifier.size(15.dp)
+                                modifier = Modifier.size(15.dp),
+                                tint = MaterialTheme.colorScheme.primary
                             )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            selectedLabelColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true,
-                            selected = true,
-                            borderColor = MaterialTheme.colorScheme.outlineVariant
-                        )
-                    )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                activeTemplateName,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
                     Spacer(Modifier.width(4.dp))
                     IconButton(onClick = viewModel::goToToday) {
                         Icon(Icons.Default.Today, contentDescription = "Bugün")
@@ -240,9 +243,7 @@ fun ScheduleHomePage(
 
                     else -> {
                         val entry = uiState.entry
-                        if (entry == null) {
-                            Text("Yükleniyor...", Modifier.align(Alignment.Center))
-                        } else if (entry.blocks.isEmpty()) {
+                        if (entry == null || entry.blocks.isEmpty()) {
                             EmptyDayState(onAddBlock = onAddBlock)
                         } else {
                             LazyColumn(

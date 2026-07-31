@@ -31,6 +31,7 @@ fun TemplatesPage(
     onNewTemplate: () -> Unit
 ) {
     var editingTemplate by remember { mutableStateOf<DayTemplate?>(null) }
+    var templateToDelete by remember { mutableStateOf<DayTemplate?>(null) }
 
     Scaffold(
         topBar = {
@@ -73,6 +74,7 @@ fun TemplatesPage(
                 .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 16.dp)
         ) {
+            ErrorBanner(error = uiState.error, onDismiss = viewModel::clearError)
             if (uiState.templates.isEmpty()) {
                 // Expressive Empty State
                 Column(
@@ -119,7 +121,7 @@ fun TemplatesPage(
                         TemplateCardItem(
                             template = template,
                             onEdit = { editingTemplate = template },
-                            onDelete = { viewModel.deleteTemplate(template.id) }
+                            onDelete = { templateToDelete = template }
                         )
                     }
                 }
@@ -133,6 +135,29 @@ fun TemplatesPage(
             viewModel = viewModel,
             uiState = uiState,
             templateToEdit = editingTemplate
+        )
+    }
+
+    templateToDelete?.let { template ->
+        AlertDialog(
+            onDismissRequest = { templateToDelete = null },
+            title = { Text("Şablonu sil", fontWeight = FontWeight.Bold) },
+            text = { Text("\"${template.name}\" silinecek. Bu şablonu kullanan günler bağımsız güne dönüşür; işlem geri alınamaz.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteTemplate(template.id)
+                        templateToDelete = null
+                    }
+                ) {
+                    Text("Sil", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { templateToDelete = null }) {
+                    Text("Vazgeç")
+                }
+            }
         )
     }
 }

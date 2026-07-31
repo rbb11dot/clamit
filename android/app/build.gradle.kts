@@ -13,6 +13,11 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+
+        // Backend runs on the same device (Termux) — 127.0.0.1 is reachable there.
+        // Override with -PapiBaseUrl=http://<host>:8080/ for a remote backend.
+        val apiBaseUrl = (project.findProperty("apiBaseUrl") as String?) ?: "http://127.0.0.1:8080/"
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
     }
 
     buildTypes {
@@ -32,6 +37,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     lint {

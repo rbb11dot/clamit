@@ -26,7 +26,7 @@ fun IconPickerSheet(
             Text("İkon Seç", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(12.dp))
             LazyVerticalGrid(
-                columns = GridCells.Fixed(6),
+                columns = GridCells.Adaptive(minSize = 48.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.fillMaxWidth()

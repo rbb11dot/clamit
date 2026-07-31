@@ -28,9 +28,16 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
     var showDatePicker by remember { mutableStateOf(false) }
     var showTemplatePicker by remember { mutableStateOf(false) }
     var showBlockEditor by remember { mutableStateOf(false) }
+    var blockEditorAddToDay by remember { mutableStateOf(false) }
     var showTemplateEditor by remember { mutableStateOf(false) }
     val activity = LocalContext.current as? android.app.Activity
 
+    // Full-screen editors overlay everything: Back must dismiss the editor first,
+    // never exit the app or navigate away underneath it. Registered last so it wins.
+    BackHandler(enabled = showBlockEditor || showTemplateEditor) {
+        showBlockEditor = false
+        showTemplateEditor = false
+    }
     BackHandler(enabled = drawerState.isOpen) {
         scope.launch { drawerState.close() }
     }
@@ -126,7 +133,10 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
                 onMenuClick = { scope.launch { drawerState.open() } },
                 onDatePicker = { showDatePicker = true },
                 onTemplatePicker = { showTemplatePicker = true },
-                onAddBlock = { showBlockEditor = true }
+                onAddBlock = {
+                    blockEditorAddToDay = true
+                    showBlockEditor = true
+                }
             )
 
             SchedulePage.TEMPLATES -> TemplatesPage(
@@ -140,13 +150,20 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
                 viewModel = viewModel,
                 uiState = uiState,
                 onMenuClick = { scope.launch { drawerState.open() } },
-                onNewBlock = { showBlockEditor = true }
+                onNewBlock = {
+                    blockEditorAddToDay = false
+                    showBlockEditor = true
+                }
             )
         }
     }
 
     if (showDatePicker) DatePickerDialog(viewModel, uiState) { showDatePicker = false }
     if (showTemplatePicker) TemplatePickerDialog(viewModel, uiState) { showTemplatePicker = false }
-    if (showBlockEditor) BlockEditorPage(onDismiss = { showBlockEditor = false }, viewModel = viewModel)
+    if (showBlockEditor) BlockEditorPage(
+        onDismiss = { showBlockEditor = false },
+        viewModel = viewModel,
+        addToCurrentDay = blockEditorAddToDay
+    )
     if (showTemplateEditor) TemplateEditorPage(onDismiss = { showTemplateEditor = false }, viewModel = viewModel, uiState = uiState)
 }
