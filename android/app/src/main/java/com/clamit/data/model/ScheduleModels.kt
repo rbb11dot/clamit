@@ -5,6 +5,7 @@ data class DayTemplate(
     val name: String = "",
     val icon: String = "",
     val repeatDays: List<Int> = emptyList(),
+    val blocks: List<TimeBlock> = emptyList(),
     val createdAt: String = ""
 )
 

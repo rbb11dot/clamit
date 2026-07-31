@@ -1,16 +1,28 @@
 package com.clamit.ui.schedule
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.clamit.data.model.TimeBlock
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -20,39 +32,268 @@ fun BlocksPage(
     onMenuClick: () -> Unit,
     onNewBlock: () -> Unit
 ) {
+    // Extract all blocks from templates
+    val allBlocksWithTemplates = remember(uiState.templates) {
+        uiState.templates.flatMap { template ->
+            template.blocks.map { block -> template to block }
+        }
+    }
+
+    var blockToDelete by remember { mutableStateOf<TimeBlock?>(null) }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                navigationIcon = { IconButton(onClick = onMenuClick) { Icon(Icons.Default.Menu, "Menü") } },
-                title = { Text("Zaman Blokları") }
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                ),
+                navigationIcon = {
+                    IconButton(onClick = onMenuClick) {
+                        Icon(Icons.Default.Menu, contentDescription = "Menü")
+                    }
+                },
+                title = {
+                    Text(
+                        "Zaman Blokları",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             )
         },
         floatingActionButton = {
-            FloatingActionButton(onClick = onNewBlock) { Icon(Icons.Default.Add, "Yeni blok") }
+            ExtendedFloatingActionButton(
+                onClick = onNewBlock,
+                shape = RoundedCornerShape(20.dp),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                elevation = FloatingActionButtonDefaults.elevation(6.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Yeni blok")
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Yeni Blok", fontWeight = FontWeight.Bold)
+            }
         }
     ) { padding ->
-        Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(32.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(MaterialTheme.colorScheme.background)
+                .padding(horizontal = 16.dp)
         ) {
-            Text("Zaman blokları şablonlar içinde yönetilir.",
-                style = MaterialTheme.typography.bodyLarge)
-            Spacer(Modifier.height(8.dp))
-            Text("Bir şablon oluşturup içine blok ekleyin.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            ErrorBanner(error = uiState.error, onDismiss = viewModel::clearError)
+
+            if (allBlocksWithTemplates.isEmpty()) {
+                // Expressive Empty State
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        modifier = Modifier.size(96.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                Icons.Default.Timer,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(20.dp))
+                    Text(
+                        "Henüz zaman bloğu yok.",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Aşağıdaki + butonuna basarak yeni bir zaman bloğu oluşturun.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(top = 12.dp, bottom = 88.dp)
+                ) {
+                    items(allBlocksWithTemplates, key = { (_, block) -> block.id }) { (template, block) ->
+                        TimeBlockListItem(
+                            block = block,
+                            templateName = template.name,
+                            onDelete = { blockToDelete = block }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    blockToDelete?.let { block ->
+        AlertDialog(
+            onDismissRequest = { blockToDelete = null },
+            title = { Text("Bloğu sil", fontWeight = FontWeight.Bold) },
+            text = { Text("\"${block.name}\" şablonundan silinecek. Bu işlem geri alınamaz.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteBlock(block.id)
+                        blockToDelete = null
+                    }
+                ) {
+                    Text("Sil", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { blockToDelete = null }) {
+                    Text("Vazgeç")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun TimeBlockListItem(
+    block: TimeBlock,
+    templateName: String,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                RoundedCornerShape(20.dp)
+            ),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                // Icon Box
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = ScheduleIcons.getIconOrDefault(block.icon),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                // Name & Mode/Time
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = block.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    val timeText = if (block.mode == "start_end" && !block.endTime.isNullOrBlank()) {
+                        "${block.startTime} - ${block.endTime}"
+                    } else if (block.durationMin != null) {
+                        "${block.startTime} • ${block.durationMin} dakika"
+                    } else {
+                        block.startTime
+                    }
+
+                    Text(
+                        text = timeText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                // Template Name Badge
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
+                    )
+                ) {
+                    Text(
+                        text = templateName,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // Delete Button
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Sil",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+
+            // Subtask summary pills if present
+            if (block.subtasks.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.FormatListNumbered,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${block.subtasks.size} subtask: ${block.subtasks.joinToString(", ") { it.name }}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                }
+            }
         }
     }
 }
 
 // ---- Full Screen Block Editor ----
 
+/** Draft row with a stable id so LazyColumn keys keep focus/cursor on the row,
+ *  not the position, after a reorder. */
+private data class SubtaskDraft(val id: Long, val text: String)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BlockEditorPage(
     onDismiss: () -> Unit,
-    viewModel: ScheduleViewModel
+    viewModel: ScheduleViewModel,
+    addToCurrentDay: Boolean = false
 ) {
     var name by remember { mutableStateOf("") }
     var blockIcon by remember { mutableStateOf("alarm") }
@@ -62,18 +303,103 @@ fun BlockEditorPage(
     var endHour by remember { mutableStateOf("07") }
     var endMin by remember { mutableStateOf("30") }
     var duration by remember { mutableStateOf("30") }
-    var subtasks by remember { mutableStateOf(listOf("")) }
+    var subtasks by remember { mutableStateOf(listOf(SubtaskDraft(0, ""))) }
+    var nextSubtaskId by remember { mutableLongStateOf(1L) }
+    var saving by remember { mutableStateOf(false) }
+    var validationError by remember { mutableStateOf<String?>(null) }
+
+    val scope = rememberCoroutineScope()
+
+    // Time field validation (Saat 0-23, Dakika 0-59, Süre > 0)
+    val startH = startHour.toIntOrNull()
+    val startM = startMin.toIntOrNull()
+    val endH = endHour.toIntOrNull()
+    val endM = endMin.toIntOrNull()
+    val dur = duration.toIntOrNull()
+    val timeValid = startH != null && startH in 0..23 &&
+        startM != null && startM in 0..59 &&
+        (mode != "start_end" || (endH != null && endH in 0..23 && endM != null && endM in 0..59)) &&
+        (mode != "start_duration" || (dur != null && dur > 0))
+
+    fun moveSubtask(fromIndex: Int, toIndex: Int) {
+        if (toIndex in subtasks.indices && fromIndex in subtasks.indices) {
+            val list = subtasks.toMutableList()
+            val item = list.removeAt(fromIndex)
+            list.add(toIndex, item)
+            subtasks = list
+        }
+    }
+
+    fun save() {
+        if (saving) return
+        if (!timeValid) {
+            validationError = "Geçersiz saat. Saat 0-23, dakika 0-59 arasında olmalı."
+            return
+        }
+        validationError = null
+        saving = true
+        scope.launch {
+            val st = "${startHour.padStart(2, '0')}:${startMin.padStart(2, '0')}"
+            val et = if (mode == "start_end") "${endHour.padStart(2, '0')}:${endMin.padStart(2, '0')}" else null
+            val durMin = if (mode == "start_duration") dur else null
+
+            // Sequential save: resolve/create the template FIRST, then create the block
+            // with the real template id — never a fire-and-forget createTemplate followed
+            // by a synchronous read of the stale template list.
+            val templateId = viewModel.ensureTemplateId()
+            val blockId = if (templateId != null) {
+                viewModel.createBlockSuspended(
+                    templateId,
+                    name.trim(),
+                    blockIcon,
+                    mode,
+                    st,
+                    et,
+                    durMin,
+                    subtasks.map { it.text }.filter { it.isNotBlank() }
+                )
+            } else {
+                null
+            }
+
+            // Opened from the home page FAB: the new block must land on the current day.
+            if (blockId != null && addToCurrentDay) {
+                viewModel.addSpecialBlockToCurrentDaySuspended(blockId)
+            }
+
+            saving = false
+            if (blockId != null) onDismiss()
+            // On failure uiState.error is set by the ViewModel; the editor stays open for retry.
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Zaman Bloğu Oluştur") },
-                navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.Default.ArrowBack, "Geri") } }
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                ),
+                title = {
+                    Text(
+                        "Zaman Bloğu Oluştur",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Geri")
+                    }
+                }
             )
         }
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(MaterialTheme.colorScheme.background)
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Icon + Name
@@ -81,93 +407,311 @@ fun BlockEditorPage(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconPickerButton(currentIcon = blockIcon) { blockIcon = it }
                     Spacer(Modifier.width(12.dp))
-                    OutlinedTextField(value = name, onValueChange = { name = it },
-                        label = { Text("Blok adı") }, placeholder = { Text("Sabah rutini") },
-                        singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = { name = it },
+                        label = { Text("Blok adı") },
+                        placeholder = { Text("Sabah rutini") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
 
-            // Mode
+            // Mode Selection
             item {
-                Text("Zaman modu", fontWeight = FontWeight.Medium)
+                Text(
+                    "Zaman Modu",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
                         selected = mode == "start_end",
                         onClick = { mode = "start_end" },
-                        label = { Text("Başlangıç + Bitiş") }
+                        label = { Text("Başlangıç + Bitiş") },
+                        shape = RoundedCornerShape(12.dp)
                     )
                     FilterChip(
                         selected = mode == "start_duration",
                         onClick = { mode = "start_duration" },
-                        label = { Text("Başlangıç + Süre") }
+                        label = { Text("Başlangıç + Süre") },
+                        shape = RoundedCornerShape(12.dp)
                     )
                 }
             }
 
-            // Start time
+            // Start Time Inputs
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = startHour, onValueChange = { if (it.length <= 2) startHour = it },
-                        label = { Text("Saat") }, singleLine = true, modifier = Modifier.weight(1f))
-                    Text(":", modifier = Modifier.padding(top = 24.dp))
-                    OutlinedTextField(value = startMin, onValueChange = { if (it.length <= 2) startMin = it },
-                        label = { Text("Dk") }, singleLine = true, modifier = Modifier.weight(1f))
+                Text(
+                    "Başlangıç Saati",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = startHour,
+                        onValueChange = { if (it.length <= 2) startHour = it },
+                        label = { Text("Saat") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(":", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    OutlinedTextField(
+                        value = startMin,
+                        onValueChange = { if (it.length <= 2) startMin = it },
+                        label = { Text("Dakika") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
 
             if (mode == "start_end") {
                 item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(value = endHour, onValueChange = { if (it.length <= 2) endHour = it },
-                            label = { Text("Bitiş saati") }, singleLine = true, modifier = Modifier.weight(1f))
-                        Text(":", modifier = Modifier.padding(top = 24.dp))
-                        OutlinedTextField(value = endMin, onValueChange = { if (it.length <= 2) endMin = it },
-                            label = { Text("Dk") }, singleLine = true, modifier = Modifier.weight(1f))
+                    Text(
+                        "Bitiş Saati",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = endHour,
+                            onValueChange = { if (it.length <= 2) endHour = it },
+                            label = { Text("Saat") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(":", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        OutlinedTextField(
+                            value = endMin,
+                            onValueChange = { if (it.length <= 2) endMin = it },
+                            label = { Text("Dakika") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             } else {
                 item {
-                    OutlinedTextField(value = duration, onValueChange = { if (it.length <= 3) duration = it },
-                        label = { Text("Süre (dakika)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Text(
+                        "Süre",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = duration,
+                        onValueChange = { if (it.length <= 3) duration = it },
+                        label = { Text("Süre (dakika)") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
 
-            // Subtasks
-            item { Text("Subtask'ler", fontWeight = FontWeight.Medium) }
-            items(subtasks.indices.toList(), key = { it }) { index ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("⠿", modifier = Modifier.padding(end = 8.dp))
-                    OutlinedTextField(
-                        value = subtasks[index],
-                        onValueChange = { n -> subtasks = subtasks.toMutableList().also { it[index] = n } },
-                        placeholder = { Text("Subtask ${index + 1}") }, singleLine = true,
-                        modifier = Modifier.weight(1f))
-                    if (subtasks.size > 1) {
-                        IconButton(onClick = { subtasks = subtasks.toMutableList().also { it.removeAt(index) } }) {
-                            Icon(Icons.Default.Close, "Sil")
+            // Subtasks & Reordering
+            item {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "Subtask'ler ve Sıralama",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "${subtasks.count { it.text.isNotBlank() }} adet",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+
+            itemsIndexed(subtasks, key = { _, draft -> draft.id }) { index, subtask ->
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        // Order Pill Badge
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = "${index + 1}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.width(8.dp))
+
+                        // TextField
+                        OutlinedTextField(
+                            value = subtask.text,
+                            onValueChange = { n ->
+                                subtasks = subtasks.map { if (it.id == subtask.id) it.copy(text = n) else it }
+                            },
+                            placeholder = { Text("Subtask ${index + 1}") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        // Reorder Up Button
+                        IconButton(
+                            onClick = { moveSubtask(index, index - 1) },
+                            enabled = index > 0,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.KeyboardArrowUp,
+                                contentDescription = "Yukarı taşı",
+                                tint = if (index > 0) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                            )
+                        }
+
+                        // Reorder Down Button
+                        IconButton(
+                            onClick = { moveSubtask(index, index + 1) },
+                            enabled = index < subtasks.size - 1,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Aşağı taşı",
+                                tint = if (index < subtasks.size - 1) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                            )
+                        }
+
+                        // Remove Subtask
+                        if (subtasks.size > 1) {
+                            IconButton(
+                                onClick = {
+                                    subtasks = subtasks.filterNot { it.id == subtask.id }
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Sil",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
                     }
                 }
             }
+
             item {
-                TextButton(onClick = { subtasks = subtasks + "" }) {
-                    Icon(Icons.Default.Add, null); Spacer(Modifier.width(4.dp)); Text("Subtask ekle")
+                OutlinedButton(
+                    onClick = {
+                        subtasks = subtasks + SubtaskDraft(nextSubtaskId, "")
+                        nextSubtaskId++
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Subtask Ekle", fontWeight = FontWeight.SemiBold)
                 }
             }
 
-            // Save
+            // Validation feedback
+            validationError?.let { msg ->
+                item {
+                    Text(
+                        text = msg,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            // Save Action
             item {
+                Spacer(Modifier.height(8.dp))
                 Button(
-                    onClick = {
-                        val st = "${startHour.padStart(2,'0')}:${startMin.padStart(2,'0')}"
-                        val et = if (mode == "start_end") "${endHour.padStart(2,'0')}:${endMin.padStart(2,'0')}" else null
-                        val dur = if (mode == "start_duration") duration.toIntOrNull() else null
-                        viewModel.createBlock("", name, blockIcon, mode, st, et, dur, subtasks.filter { it.isNotBlank() })
-                        onDismiss()
-                    },
-                    enabled = name.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Kaydet") }
+                    onClick = ::save,
+                    enabled = name.isNotBlank() && timeValid && !saving,
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth().height(48.dp)
+                ) {
+                    if (saving) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            strokeWidth = 2.5.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text("Kaydediliyor…", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    } else {
+                        Text("Kaydet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Shared dismissible error banner used on list pages. */
+@Composable
+fun ErrorBanner(error: String?, onDismiss: () -> Unit) {
+    if (error == null) return
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer
+        ),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 16.dp, top = 4.dp, end = 4.dp, bottom = 4.dp)
+        ) {
+            Icon(Icons.Default.ErrorOutline, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1f)
+            )
+            IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Close, contentDescription = "Kapat", modifier = Modifier.size(18.dp))
             }
         }
     }

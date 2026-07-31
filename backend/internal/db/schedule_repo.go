@@ -103,8 +103,41 @@ func (r *ScheduleRepo) UpdateTemplate(ctx context.Context, id string, req models
 }
 
 func (r *ScheduleRepo) DeleteTemplate(ctx context.Context, id string) error {
-	_, err := r.db.ExecContext(ctx, `DELETE FROM day_templates WHERE id = ?`, id)
-	return err
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("delete template: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Copy-on-write: every day using this template becomes a standalone special day
+	// holding its own snapshot of the template's blocks, so the deletion never
+	// destroys day data.
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM schedule_entries WHERE template_id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete template: list entries: %w", err)
+	}
+	var entryIDs []string
+	for rows.Next() {
+		var eid string
+		if err := rows.Scan(&eid); err != nil {
+			rows.Close()
+			return fmt.Errorf("delete template: scan entry: %w", err)
+		}
+		entryIDs = append(entryIDs, eid)
+	}
+	rows.Close()
+	for _, eid := range entryIDs {
+		if err := r.detachEntryFromTemplateTx(ctx, tx, eid, id); err != nil {
+			return fmt.Errorf("delete template: detach entry %s: %w", eid, err)
+		}
+	}
+
+	if _, err = tx.ExecContext(ctx,
+		`DELETE FROM day_templates WHERE id=?`, id); err != nil {
+		return fmt.Errorf("delete template: %w", err)
+	}
+
+	return tx.Commit()
 }
 
 // ---- Time Blocks ----
@@ -395,22 +428,44 @@ func (r *ScheduleRepo) SetEntryTemplate(ctx context.Context, date string, templa
 		return nil, err
 	}
 
-	if templateID == nil {
-		// Convert to special day
-		_, err = r.db.ExecContext(ctx,
-			`UPDATE schedule_entries SET template_id=NULL, is_special=1 WHERE id=?`, entry.ID)
-	} else {
-		_, err = r.db.ExecContext(ctx,
-			`UPDATE schedule_entries SET template_id=?, is_special=0 WHERE id=?`, *templateID, entry.ID)
-		// Rebuild block states from template
-		if err == nil {
-			if rebuildErr := r.rebuildBlockStates(ctx, entry.ID, *templateID); rebuildErr != nil {
-				return nil, fmt.Errorf("rebuild block states: %w", rebuildErr)
-			}
-		}
-	}
+	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("set template: %w", err)
+	}
+	defer tx.Rollback()
+
+	if templateID == nil {
+		// Convert to a standalone special day (copy-on-write snapshot).
+		if entry.TemplateID != nil {
+			if err := r.detachEntryFromTemplateTx(ctx, tx, entry.ID, *entry.TemplateID); err != nil {
+				return nil, err
+			}
+		} else if !entry.IsSpecial {
+			if _, err = tx.ExecContext(ctx,
+				`UPDATE schedule_entries SET template_id=NULL, is_special=1 WHERE id=?`, entry.ID); err != nil {
+				return nil, fmt.Errorf("set template: mark special: %w", err)
+			}
+		}
+	} else {
+		// Attach a template: drop any day-owned snapshot blocks, then link and
+		// rebuild the day's states from the template.
+		if _, err = tx.ExecContext(ctx,
+			`DELETE FROM time_blocks WHERE entry_id = ?`, entry.ID); err != nil {
+			return nil, fmt.Errorf("set template: clear day blocks: %w", err)
+		}
+		if _, err = tx.ExecContext(ctx,
+			`UPDATE schedule_entries SET template_id=?, is_special=0 WHERE id=?`, *templateID, entry.ID); err != nil {
+			return nil, fmt.Errorf("set template: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("set template: commit: %w", err)
+	}
+
+	if templateID != nil {
+		if rebuildErr := r.rebuildBlockStates(ctx, entry.ID, *templateID); rebuildErr != nil {
+			return nil, fmt.Errorf("rebuild block states: %w", rebuildErr)
+		}
 	}
 
 	return r.GetEntry(ctx, date)
@@ -422,16 +477,35 @@ func (r *ScheduleRepo) AddSpecialBlock(ctx context.Context, date string, blockID
 		return err
 	}
 
-	// Mark as special
-	if !entry.IsSpecial {
-		_, err = r.db.ExecContext(ctx,
-			`UPDATE schedule_entries SET is_special=1 WHERE id=?`, entry.ID)
-		if err != nil {
-			return fmt.Errorf("mark special: %w", err)
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("add special block: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Copy-on-write: a template-linked day detaches into its own snapshot first,
+	// so adding a block never silently mutates the shared template.
+	if entry.TemplateID != nil {
+		if err := r.detachEntryFromTemplateTx(ctx, tx, entry.ID, *entry.TemplateID); err != nil {
+			return err
+		}
+	} else if !entry.IsSpecial {
+		if _, err = tx.ExecContext(ctx,
+			`UPDATE schedule_entries SET is_special=1 WHERE id=?`, entry.ID); err != nil {
+			return fmt.Errorf("add special block: mark special: %w", err)
 		}
 	}
 
-	return r.createBlockState(ctx, entry.ID, blockID)
+	// The added block becomes day-owned too, so it survives its library template's
+	// deletion. The state row points at the day-owned copy.
+	copyID, _, err := r.copyBlockToEntryTx(ctx, tx, entry.ID, blockID)
+	if err != nil {
+		return err
+	}
+	if err = r.createBlockStateTx(ctx, tx, entry.ID, copyID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *ScheduleRepo) RemoveSpecialBlock(ctx context.Context, date string, blockID string) error {
@@ -440,9 +514,135 @@ func (r *ScheduleRepo) RemoveSpecialBlock(ctx context.Context, date string, bloc
 		return err
 	}
 
-	_, err = r.db.ExecContext(ctx,
-		`DELETE FROM time_block_states WHERE entry_id=? AND time_block_id=?`, entry.ID, blockID)
-	return err
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("remove special block: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err = tx.ExecContext(ctx,
+		`DELETE FROM time_block_states WHERE entry_id=? AND time_block_id=?`, entry.ID, blockID); err != nil {
+		return fmt.Errorf("remove special block: %w", err)
+	}
+	// Drop the day-owned copy (cascades its subtasks).
+	if _, err = tx.ExecContext(ctx,
+		`DELETE FROM time_blocks WHERE id=? AND entry_id=?`, blockID, entry.ID); err != nil {
+		return fmt.Errorf("remove special block: drop copy: %w", err)
+	}
+	return tx.Commit()
+}
+
+// copyBlockToEntryTx copies a library block (and its subtasks) into a day-owned row
+// owned by entryID. Returns the new day-owned block id plus a map of old subtask id
+// to new subtask id. Runs inside a transaction.
+func (r *ScheduleRepo) copyBlockToEntryTx(ctx context.Context, tx *sql.Tx, entryID string, srcBlockID string) (string, map[string]string, error) {
+	var b struct {
+		name       string
+		icon       string
+		mode       string
+		startTime  string
+		endTime    sql.NullString
+		duration   sql.NullInt64
+		blockOrder int
+	}
+	err := tx.QueryRowContext(ctx,
+		`SELECT name, icon, mode, start_time, end_time, duration_min, block_order
+		 FROM time_blocks WHERE id = ?`, srcBlockID).
+		Scan(&b.name, &b.icon, &b.mode, &b.startTime, &b.endTime, &b.duration, &b.blockOrder)
+	if err != nil {
+		return "", nil, fmt.Errorf("copy block: read source: %w", err)
+	}
+
+	newID := uuid.New().String()
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO time_blocks (id, template_id, entry_id, name, icon, mode, start_time, end_time, duration_min, block_order)
+		 VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		newID, entryID, b.name, b.icon, b.mode, b.startTime, b.endTime, b.duration, b.blockOrder)
+	if err != nil {
+		return "", nil, fmt.Errorf("copy block: insert copy: %w", err)
+	}
+
+	rows, err := tx.QueryContext(ctx,
+		`SELECT id, name, subtask_order FROM subtasks WHERE time_block_id = ? ORDER BY subtask_order`, srcBlockID)
+	if err != nil {
+		return "", nil, fmt.Errorf("copy block: list subtasks: %w", err)
+	}
+	defer rows.Close()
+	subMap := make(map[string]string)
+	for rows.Next() {
+		var sid, sname string
+		var sorder int
+		if err := rows.Scan(&sid, &sname, &sorder); err != nil {
+			return "", nil, fmt.Errorf("copy block: scan subtask: %w", err)
+		}
+		newSubID := uuid.New().String()
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO subtasks (id, time_block_id, name, subtask_order) VALUES (?, ?, ?, ?)`,
+			newSubID, newID, sname, sorder); err != nil {
+			return "", nil, fmt.Errorf("copy block: insert subtask: %w", err)
+		}
+		subMap[sid] = newSubID
+	}
+	if err := rows.Err(); err != nil {
+		return "", nil, fmt.Errorf("copy block: subtasks: %w", err)
+	}
+	return newID, subMap, nil
+}
+
+// detachEntryFromTemplateTx implements copy-on-write for a special day: the entry's
+// template blocks (and subtasks) are copied into day-owned rows, the day's existing
+// state/subtask-state rows are re-pointed at the copies (preserving status and
+// toggles), and the entry is marked as a standalone special day. Runs inside a tx.
+func (r *ScheduleRepo) detachEntryFromTemplateTx(ctx context.Context, tx *sql.Tx, entryID string, templateID string) error {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT id FROM time_blocks WHERE template_id = ? ORDER BY block_order`, templateID)
+	if err != nil {
+		return fmt.Errorf("detach: list blocks: %w", err)
+	}
+	type blockCopy struct {
+		oldID  string
+		newID  string
+		subMap map[string]string
+	}
+	var copies []blockCopy
+	for rows.Next() {
+		var oldID string
+		if err := rows.Scan(&oldID); err != nil {
+			rows.Close()
+			return fmt.Errorf("detach: scan block: %w", err)
+		}
+		newID, subMap, err := r.copyBlockToEntryTx(ctx, tx, entryID, oldID)
+		if err != nil {
+			rows.Close()
+			return fmt.Errorf("detach: copy block %s: %w", oldID, err)
+		}
+		copies = append(copies, blockCopy{oldID: oldID, newID: newID, subMap: subMap})
+	}
+	rows.Close()
+
+	// Re-point the day's states at the copies, preserving status and toggles.
+	for _, c := range copies {
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE time_block_states SET time_block_id = ? WHERE entry_id = ? AND time_block_id = ?`,
+			c.newID, entryID, c.oldID); err != nil {
+			return fmt.Errorf("detach: re-point states: %w", err)
+		}
+		for oldSub, newSub := range c.subMap {
+			if _, err := tx.ExecContext(ctx,
+				`UPDATE subtask_states SET subtask_id = ?
+				 WHERE time_block_state_id IN (SELECT id FROM time_block_states WHERE entry_id = ? AND time_block_id = ?)
+				   AND subtask_id = ?`,
+				newSub, entryID, c.newID, oldSub); err != nil {
+				return fmt.Errorf("detach: re-point subtask states: %w", err)
+			}
+		}
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE schedule_entries SET template_id = NULL, is_special = 1 WHERE id = ?`, entryID); err != nil {
+		return fmt.Errorf("detach: mark special: %w", err)
+	}
+	return nil
 }
 
 // ---- Status Updates ----
@@ -456,6 +656,58 @@ func (r *ScheduleRepo) UpdateAutoStatus(ctx context.Context, date string, blockI
 		`UPDATE time_block_states SET auto_status=? WHERE entry_id=? AND time_block_id=?`,
 		status, entry.ID, blockID)
 	return err
+}
+
+// RecomputeAutoStatus computes the auto status for one block from the current time
+// (same transitions as the periodic updater) and persists it. Returns the status.
+func (r *ScheduleRepo) RecomputeAutoStatus(ctx context.Context, date string, blockID string) (string, error) {
+	var mode, startTime string
+	var endTime sql.NullString
+	var duration sql.NullInt64
+	err := r.db.QueryRowContext(ctx,
+		`SELECT mode, start_time, end_time, duration_min FROM time_blocks WHERE id = ?`, blockID).
+		Scan(&mode, &startTime, &endTime, &duration)
+	if err != nil {
+		return "", fmt.Errorf("recompute auto status: get block: %w", err)
+	}
+
+	now := time.Now()
+	current := now.Format("15:04")
+	status := "pending"
+	if startTime <= current {
+		if mode == "start_end" && endTime.Valid {
+			if endTime.String <= current {
+				status = "completed"
+			} else {
+				status = "in_progress"
+			}
+		} else if mode == "start_duration" && duration.Valid && duration.Int64 > 0 {
+			start, perr := time.Parse("15:04", startTime)
+			if perr != nil {
+				return "", fmt.Errorf("recompute auto status: parse start: %w", perr)
+			}
+			end := start.Add(time.Duration(duration.Int64) * time.Minute).Format("15:04")
+			if end <= current {
+				status = "completed"
+			} else {
+				status = "in_progress"
+			}
+		} else {
+			status = "in_progress"
+		}
+	}
+
+	entry, err := r.GetOrCreateEntry(ctx, date)
+	if err != nil {
+		return "", err
+	}
+	_, err = r.db.ExecContext(ctx,
+		`UPDATE time_block_states SET auto_status=? WHERE entry_id=? AND time_block_id=?`,
+		status, entry.ID, blockID)
+	if err != nil {
+		return "", fmt.Errorf("recompute auto status: update: %w", err)
+	}
+	return status, nil
 }
 
 func (r *ScheduleRepo) UpdateManualStatus(ctx context.Context, date string, blockID string, status string) error {
@@ -523,9 +775,9 @@ func (r *ScheduleRepo) findTemplateForDate(ctx context.Context, dateStr string) 
 	return nil, nil
 }
 
-func (r *ScheduleRepo) createBlockState(ctx context.Context, entryID string, blockID string) error {
+func (r *ScheduleRepo) createBlockStateTx(ctx context.Context, tx *sql.Tx, entryID string, blockID string) error {
 	id := uuid.New().String()
-	_, err := r.db.ExecContext(ctx,
+	_, err := tx.ExecContext(ctx,
 		`INSERT INTO time_block_states (id, entry_id, time_block_id) VALUES (?, ?, ?)`,
 		id, entryID, blockID)
 	if err != nil {
@@ -539,7 +791,7 @@ func (r *ScheduleRepo) createBlockState(ctx context.Context, entryID string, blo
 	}
 	for _, s := range subtasks {
 		sid := uuid.New().String()
-		_, err := r.db.ExecContext(ctx,
+		_, err := tx.ExecContext(ctx,
 			`INSERT INTO subtask_states (id, time_block_state_id, subtask_id) VALUES (?, ?, ?)`,
 			sid, id, s.ID)
 		if err != nil {
@@ -547,6 +799,18 @@ func (r *ScheduleRepo) createBlockState(ctx context.Context, entryID string, blo
 		}
 	}
 	return nil
+}
+
+func (r *ScheduleRepo) createBlockState(ctx context.Context, entryID string, blockID string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := r.createBlockStateTx(ctx, tx, entryID, blockID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (r *ScheduleRepo) getBlockStates(ctx context.Context, entryID string, templateID *string) ([]models.BlockState, error) {
@@ -586,21 +850,31 @@ func (r *ScheduleRepo) getBlockStates(ctx context.Context, entryID string, templ
 
 		if stateID.Valid {
 			bs.ID = stateID.String
-			// Load subtask states
-			subRows, err := r.db.QueryContext(ctx,
-				`SELECT ss.id, ss.subtask_id, s.name, ss.done, s.subtask_order
-				 FROM subtask_states ss
-				 JOIN subtasks s ON ss.subtask_id = s.id
-				 WHERE ss.time_block_state_id = ?
-				 ORDER BY s.subtask_order`, stateID.String)
-			if err == nil {
-				for subRows.Next() {
-					var st models.SubtaskState
-					subRows.Scan(&st.ID, &st.SubtaskID, &st.Name, &st.Done, &st.Order)
-					bs.SubtaskStates = append(bs.SubtaskStates, st)
-				}
-				subRows.Close()
+		}
+
+		var subRows *sql.Rows
+		var subErr error
+		if stateID.Valid {
+			subRows, subErr = r.db.QueryContext(ctx,
+				`SELECT COALESCE(ss.id, ''), s.id, s.name, COALESCE(ss.done, 0), s.subtask_order
+				 FROM subtasks s
+				 LEFT JOIN subtask_states ss ON ss.subtask_id = s.id AND ss.time_block_state_id = ?
+				 WHERE s.time_block_id = ?
+				 ORDER BY s.subtask_order`, stateID.String, bs.TimeBlockID)
+		} else {
+			subRows, subErr = r.db.QueryContext(ctx,
+				`SELECT '', id, name, 0, subtask_order
+				 FROM subtasks
+				 WHERE time_block_id = ?
+				 ORDER BY subtask_order`, bs.TimeBlockID)
+		}
+		if subErr == nil {
+			for subRows.Next() {
+				var st models.SubtaskState
+				subRows.Scan(&st.ID, &st.SubtaskID, &st.Name, &st.Done, &st.Order)
+				bs.SubtaskStates = append(bs.SubtaskStates, st)
 			}
+			subRows.Close()
 		}
 
 		blocks = append(blocks, bs)
@@ -627,7 +901,7 @@ func (r *ScheduleRepo) rebuildBlockStates(ctx context.Context, entryID string, t
 		return err
 	}
 	for _, b := range blocks {
-		if err := r.createBlockState(ctx, entryID, b.ID); err != nil {
+		if err := r.createBlockStateTx(ctx, tx, entryID, b.ID); err != nil {
 			return fmt.Errorf("create block state: %w", err)
 		}
 	}

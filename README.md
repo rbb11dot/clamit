@@ -16,7 +16,7 @@ Android APK automatically downloaded on Termux.
 
 ```bash
 clamit                          # start backend (default :8080)
-curl http://localhost:8080/health  # verify it's running
+*curl http://localhost:8080/api/health  # verify it's running
 ```
 
 ## Build from Source

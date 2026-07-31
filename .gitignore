@@ -49,3 +49,4 @@ agent_docs/*.md
 *.db
 *.db-shm
 *.db-wal
+.mcp.json

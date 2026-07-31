@@ -1,169 +1,292 @@
 package com.clamit.ui.schedule
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.clamit.data.model.BlockState
+import com.clamit.ui.theme.ClamitColors
 
 @Composable
 fun TimeBlockCard(
     block: BlockState,
     onToggleSubtask: (String) -> Unit,
     onSetCompleted: () -> Unit,
-    onSetNotCompleted: () -> Unit
+    onSetNotCompleted: () -> Unit,
+    onRemoveFromDay: (() -> Unit)? = null
 ) {
-    val statusColor = when (block.autoStatus) {
-        "in_progress" -> Color(0xFFFFA726) // turuncu
-        "completed" -> Color(0xFF66BB6A)   // yeşil
-        else -> Color(0xFF90A4AE)           // gri (pending)
+    var confirmRemove by remember { mutableStateOf(false) }
+    val isCompleted = block.manualStatus == "completed"
+    val isInProgress = block.autoStatus == "in_progress"
+
+    // Status node language: filled amber = in progress, filled teal = completed, hollow = pending
+    val nodeColor = when {
+        isCompleted -> ClamitColors.CompletedTeal
+        isInProgress -> ClamitColors.SignalAmber
+        else -> ClamitColors.PendingTeal
+    }
+    val containerColor = when {
+        isCompleted -> ClamitColors.CompletedBg
+        isInProgress -> ClamitColors.SignalAmberBg
+        else -> ClamitColors.PendingBg
+    }
+    val labelText = when {
+        isCompleted -> "Tamamlandı"
+        isInProgress -> "Devam ediyor"
+        else -> "Bekliyor"
     }
 
-    val backgroundColor by animateColorAsState(
-        targetValue = if (block.manualStatus == "completed") Color(0xFFE8F5E9)
-        else if (block.autoStatus == "in_progress") Color(0xFFFFF3E0)
-        else MaterialTheme.colorScheme.surface
+    val animatedBg by animateColorAsState(
+        targetValue = if (isInProgress || isCompleted) containerColor
+        else MaterialTheme.colorScheme.surfaceContainerLow,
+        label = "stopBg"
+    )
+    val animatedElevation by animateDpAsState(
+        targetValue = if (isInProgress) 2.dp else 0.dp,
+        label = "stopElevation"
     )
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = backgroundColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .border(
+                width = 1.dp,
+                color = if (isInProgress) nodeColor.copy(alpha = 0.55f)
+                else MaterialTheme.colorScheme.outlineVariant,
+                shape = RoundedCornerShape(18.dp)
+            ),
+        colors = CardDefaults.cardColors(containerColor = animatedBg),
+        elevation = CardDefaults.cardElevation(defaultElevation = animatedElevation)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            // Header: time + icon + name + status
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+        Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp)) {
+            // ===== Rail: time + spine + node =====
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.width(44.dp)
             ) {
-                // Time indicator
                 Text(
                     text = block.startTime,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = statusColor
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 0.sp,
+                    color = nodeColor,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    softWrap = true
                 )
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Icon
-                Text(text = block.icon, style = MaterialTheme.typography.titleLarge)
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Name
-                Text(
-                    text = block.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f)
+                Spacer(Modifier.height(6.dp))
+                // Node on the spine
+                Box(
+                    modifier = Modifier
+                        .size(if (isInProgress) 14.dp else 12.dp)
+                        .border(
+                            width = if (isCompleted || isInProgress) 0.dp else 2.dp,
+                            color = nodeColor,
+                            shape = CircleShape
+                        )
+                        .background(if (isCompleted || isInProgress) nodeColor else Color.Transparent, CircleShape)
                 )
-
-                // Duration
-                val durationText = if (block.mode == "start_end" && block.endTime != null) {
-                    "${block.startTime} - ${block.endTime}"
-                } else if (block.durationMin != null) {
-                    "${block.durationMin}dk"
-                } else ""
-
-                Text(
-                    text = durationText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Auto status badge
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = statusColor.copy(alpha = 0.2f)
-                ) {
-                    Text(
-                        text = when (block.autoStatus) {
-                            "in_progress" -> "🔵 Devam"
-                            "completed" -> "✅ Zaman doldu"
-                            else -> "⏳ Bekliyor"
-                        },
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Timeline line + Subtasks
-            Row(modifier = Modifier.fillMaxWidth()) {
-                // Timeline vertical line
+                // Spine continues below the node
                 Box(
                     modifier = Modifier
                         .width(2.dp)
-                        .height((block.subtaskStates.size * 36 + 10).dp)
-                        .background(statusColor, RoundedCornerShape(1.dp))
+                        .weight(1f)
+                        .background(nodeColor.copy(alpha = if (isInProgress) 0.9f else 0.35f))
                 )
+            }
 
-                Spacer(modifier = Modifier.width(12.dp))
+            Spacer(Modifier.width(14.dp))
 
-                // Subtasks
-                Column(modifier = Modifier.weight(1f)) {
-                    block.subtaskStates.forEach { subtask ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onToggleSubtask(subtask.subtaskId) }
-                                .padding(vertical = 6.dp)
-                        ) {
-                            Checkbox(
-                                checked = subtask.done,
-                                onCheckedChange = { onToggleSubtask(subtask.subtaskId) }
+            // ===== Stop content =====
+            Column(modifier = Modifier.weight(1f)) {
+                // Header: icon tile + name + status label
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = nodeColor.copy(alpha = 0.12f),
+                        modifier = Modifier.size(38.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = ScheduleIcons.getIconOrDefault(block.icon),
+                                contentDescription = null,
+                                tint = nodeColor,
+                                modifier = Modifier.size(20.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = subtask.name,
-                                style = MaterialTheme.typography.bodyMedium,
-                                textDecoration = if (subtask.done) TextDecoration.LineThrough
-                                    else TextDecoration.None,
-                                color = if (subtask.done) MaterialTheme.colorScheme.onSurfaceVariant
-                                    else MaterialTheme.colorScheme.onSurface
+                        }
+                    }
+
+                    Spacer(Modifier.width(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = block.name,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = durationText(block),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Spacer(Modifier.width(8.dp))
+
+                    // Status: dot + label (no emoji)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(nodeColor.copy(alpha = 0.12f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(nodeColor, CircleShape)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = labelText,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = nodeColor
+                        )
+                    }
+
+                    // Remove from day (special days only): re-addable from the library
+                    if (onRemoveFromDay != null) {
+                        Spacer(Modifier.width(4.dp))
+                        IconButton(onClick = { confirmRemove = true }, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Günden kaldır",
+                                tint = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Manual status buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                if (block.manualStatus != "completed") {
-                    FilledTonalButton(
-                        onClick = onSetCompleted,
-                        modifier = Modifier.height(32.dp)
-                    ) {
-                        Text("✓ Tamamlandı", style = MaterialTheme.typography.labelSmall)
+                // Subtasks
+                if (block.subtaskStates.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    Column {
+                        block.subtaskStates.forEach { subtask ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { onToggleSubtask(subtask.subtaskId) }
+                                    .padding(vertical = 2.dp, horizontal = 2.dp)
+                            ) {
+                                Checkbox(
+                                    checked = subtask.done,
+                                    onCheckedChange = { onToggleSubtask(subtask.subtaskId) },
+                                    colors = CheckboxDefaults.colors(
+                                        checkedColor = nodeColor,
+                                        uncheckedColor = MaterialTheme.colorScheme.outline
+                                    )
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = subtask.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (subtask.done) FontWeight.Normal else FontWeight.Medium,
+                                    textDecoration = if (subtask.done) TextDecoration.LineThrough else TextDecoration.None,
+                                    color = if (subtask.done) MaterialTheme.colorScheme.onSurfaceVariant
+                                    else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
                     }
                 }
-                if (block.manualStatus == "completed") {
-                    OutlinedButton(
-                        onClick = onSetNotCompleted,
-                        modifier = Modifier.height(32.dp)
-                    ) {
-                        Text("↩ Geri al", style = MaterialTheme.typography.labelSmall)
+
+                // Action row
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    if (!isCompleted) {
+                        FilledTonalButton(
+                            onClick = onSetCompleted,
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.height(34.dp)
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Tamamlandı", style = MaterialTheme.typography.labelMedium)
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = onSetNotCompleted,
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.height(34.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Geri al", style = MaterialTheme.typography.labelMedium)
+                        }
                     }
                 }
             }
         }
     }
+
+    if (confirmRemove && onRemoveFromDay != null) {
+        AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text("Günden kaldır", fontWeight = FontWeight.Bold) },
+            text = { Text("\"${block.name}\" bu günden kaldırılacak. Blok kütüphanede durmaya devam eder. Bu günün durumu (tamamlanma/toggle) kaybolur.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmRemove = false
+                        onRemoveFromDay()
+                    }
+                ) {
+                    Text("Kaldır", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRemove = false }) {
+                    Text("Vazgeç")
+                }
+            }
+        )
+    }
+}
+
+private fun durationText(block: BlockState): String = when {
+    block.mode == "start_end" && !block.endTime.isNullOrBlank() ->
+        "${block.startTime} - ${block.endTime}"
+    block.durationMin != null ->
+        "${block.startTime} • ${block.durationMin} dk"
+    else -> block.startTime
 }
