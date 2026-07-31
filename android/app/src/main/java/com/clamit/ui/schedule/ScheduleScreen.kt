@@ -56,13 +56,13 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
                     icon = { Icon(Icons.Default.FormatListBulleted, contentDescription = null) },
                     label = { Text("Gün Şablonları") },
                     selected = currentPage == SchedulePage.TEMPLATES,
-                    onClick = { currentPage = SchedulePage.TEMPLATES }
+                    onClick = { currentPage = SchedulePage.TEMPLATES; scope.launch { drawerState.close() } }
                 )
                 NavigationDrawerItem(
                     icon = { Icon(Icons.Default.Timer, contentDescription = null) },
                     label = { Text("Zaman Blokları") },
                     selected = currentPage == SchedulePage.BLOCKS,
-                    onClick = { currentPage = SchedulePage.BLOCKS }
+                    onClick = { currentPage = SchedulePage.BLOCKS; scope.launch { drawerState.close() } }
                 )
                 Spacer(Modifier.weight(1f))
                 Text("v0.1.0", style = MaterialTheme.typography.bodySmall,

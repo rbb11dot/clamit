@@ -152,6 +152,16 @@ class ScheduleViewModel(
             }
         }
     }
+    fun updateTemplate(id: String, name: String, icon: String, repeatDays: List<Int>) {
+        viewModelScope.launch {
+            try {
+                repository.updateTemplate(id, UpdateTemplateRequest(name, icon, repeatDays))
+                load()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = e.message)
+            }
+        }
+    }
 
     fun addBlockToDate(blockId: String) {
         viewModelScope.launch {

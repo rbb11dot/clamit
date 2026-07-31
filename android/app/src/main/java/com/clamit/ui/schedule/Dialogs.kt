@@ -47,7 +47,10 @@ fun TemplatePickerDialog(
         title = { Text("Gün Şablonu Seç") },
         text = {
             Column {
-                TextButton(onClick = { onDismiss() }) {
+                TextButton(onClick = {
+                    viewModel.setEntryTemplate(null)
+                    onDismiss()
+                }) {
                     Text("Şablon Seçin")
                 }
                 HorizontalDivider()

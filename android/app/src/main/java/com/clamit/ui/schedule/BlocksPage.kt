@@ -1,8 +1,10 @@
 package com.clamit.ui.schedule
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -11,7 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BlocksPage(
@@ -54,6 +56,16 @@ fun BlockEditorPage(
     onDismiss: () -> Unit,
     viewModel: ScheduleViewModel
 ) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val templates = uiState.templates
+    var selectedTemplateId by remember { mutableStateOf(templates.firstOrNull()?.id ?: "") }
+
+    LaunchedEffect(templates) {
+        if (selectedTemplateId.isBlank() && templates.isNotEmpty()) {
+            selectedTemplateId = templates.first().id
+        }
+    }
+
     var name by remember { mutableStateOf("") }
     var blockIcon by remember { mutableStateOf("alarm") }
     var mode by remember { mutableStateOf("start_end") }
@@ -63,7 +75,6 @@ fun BlockEditorPage(
     var endMin by remember { mutableStateOf("30") }
     var duration by remember { mutableStateOf("30") }
     var subtasks by remember { mutableStateOf(listOf("")) }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -76,6 +87,36 @@ fun BlockEditorPage(
             modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // Template Selection
+            item {
+                Text("Şablon", fontWeight = FontWeight.Medium)
+                if (templates.isEmpty()) {
+                    Text("Oluşturulmuş şablon bulunamadı. Önce bir şablon oluşturun.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error)
+                } else {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                    ) {
+                        templates.forEach { template ->
+                            FilterChip(
+                                selected = selectedTemplateId == template.id,
+                                onClick = { selectedTemplateId = template.id },
+                                label = { Text(template.name) },
+                                leadingIcon = {
+                                    Icon(
+                                        ScheduleIcons.getIconOrDefault(template.icon),
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
             // Icon + Name
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -162,10 +203,10 @@ fun BlockEditorPage(
                         val st = "${startHour.padStart(2,'0')}:${startMin.padStart(2,'0')}"
                         val et = if (mode == "start_end") "${endHour.padStart(2,'0')}:${endMin.padStart(2,'0')}" else null
                         val dur = if (mode == "start_duration") duration.toIntOrNull() else null
-                        viewModel.createBlock("", name, blockIcon, mode, st, et, dur, subtasks.filter { it.isNotBlank() })
+                        viewModel.createBlock(selectedTemplateId, name, blockIcon, mode, st, et, dur, subtasks.filter { it.isNotBlank() })
                         onDismiss()
                     },
-                    enabled = name.isNotBlank(),
+                    enabled = name.isNotBlank() && selectedTemplateId.isNotBlank(),
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Kaydet") }
             }

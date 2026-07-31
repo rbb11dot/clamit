@@ -12,7 +12,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-
+import com.clamit.data.model.DayTemplate
+import com.clamit.data.model.TimeBlock
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TemplatesPage(
@@ -21,6 +22,8 @@ fun TemplatesPage(
     onMenuClick: () -> Unit,
     onNewTemplate: () -> Unit
 ) {
+    var editingTemplate by remember { mutableStateOf<DayTemplate?>(null) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -51,11 +54,20 @@ fun TemplatesPage(
                             Text(days, style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        IconButton(onClick = { }) { Icon(Icons.Default.Edit, "Düzenle") }
+                        IconButton(onClick = { editingTemplate = t }) { Icon(Icons.Default.Edit, "Düzenle") }
                     }
                 }
             }
         }
+    }
+
+    if (editingTemplate != null) {
+        TemplateEditorPage(
+            onDismiss = { editingTemplate = null },
+            viewModel = viewModel,
+            uiState = uiState,
+            templateToEdit = editingTemplate
+        )
     }
 }
 
@@ -66,18 +78,33 @@ fun TemplatesPage(
 fun TemplateEditorPage(
     onDismiss: () -> Unit,
     viewModel: ScheduleViewModel,
-    uiState: ScheduleUiState
+    uiState: ScheduleUiState,
+    templateToEdit: DayTemplate? = null
 ) {
-    var name by remember { mutableStateOf("") }
-    var templateIcon by remember { mutableStateOf("format_list_bulleted") }
-    val selectedDays = remember { mutableStateListOf<Int>() }
-    var selectedBlockIds by remember { mutableStateOf(listOf<String>()) }
+    var name by remember(templateToEdit) { mutableStateOf(templateToEdit?.name ?: "") }
+    var templateIcon by remember(templateToEdit) { mutableStateOf(templateToEdit?.icon ?: "format_list_bulleted") }
+    val selectedDays = remember(templateToEdit) {
+        mutableStateListOf<Int>().apply {
+            templateToEdit?.repeatDays?.let { addAll(it) }
+        }
+    }
+    val selectedBlockIds = remember(templateToEdit) {
+        mutableStateListOf<String>().apply {
+            templateToEdit?.blocks?.map { it.id }?.let { addAll(it) }
+        }
+    }
     val dayNames = listOf("Pazar","Pazartesi","Salı","Çarşamba","Perşembe","Cuma","Cumartesi")
+
+    val existingBlocks = remember(uiState.templates, templateToEdit) {
+        val blocksFromTemplates = uiState.templates.flatMap { it.blocks }
+        val blocksFromEditing = templateToEdit?.blocks ?: emptyList()
+        (blocksFromTemplates + blocksFromEditing).distinctBy { it.id }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Gün Şablonu Oluştur") },
+                title = { Text(if (templateToEdit != null) "Şablonu Düzenle" else "Gün Şablonu Oluştur") },
                 navigationIcon = { IconButton(onClick = onDismiss) { Icon(Icons.Default.ArrowBack, "Geri") } }
             )
         }
@@ -114,10 +141,48 @@ fun TemplateEditorPage(
             // Blocks (from existing templates)
             item {
                 Text("Zaman blokları", fontWeight = FontWeight.Medium)
-                if (uiState.templates.isEmpty()) {
+            }
+            if (existingBlocks.isEmpty()) {
+                item {
                     Text("Henüz blok yok. Önce bir şablona blok ekleyin.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                items(existingBlocks, key = { it.id }) { block ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (block.id in selectedBlockIds) {
+                                    selectedBlockIds.remove(block.id)
+                                } else {
+                                    selectedBlockIds.add(block.id)
+                                }
+                            }
+                    ) {
+                        Checkbox(
+                            checked = block.id in selectedBlockIds,
+                            onCheckedChange = { checked ->
+                                if (checked) selectedBlockIds.add(block.id)
+                                else selectedBlockIds.remove(block.id)
+                            }
+                        )
+                        Icon(
+                            ScheduleIcons.getIconOrDefault(block.icon),
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(block.name, style = MaterialTheme.typography.bodyMedium)
+                            if (block.startTime.isNotBlank()) {
+                                val timeText = if (block.endTime != null) "${block.startTime} - ${block.endTime}" else "${block.startTime} (${block.durationMin ?: 0} dk)"
+                                Text(timeText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
                 }
             }
 
@@ -125,12 +190,16 @@ fun TemplateEditorPage(
             item {
                 Button(
                     onClick = {
-                        viewModel.createTemplate(name, templateIcon, selectedDays.toList())
+                        if (templateToEdit != null) {
+                            viewModel.updateTemplate(templateToEdit.id, name, templateIcon, selectedDays.toList())
+                        } else {
+                            viewModel.createTemplate(name, templateIcon, selectedDays.toList())
+                        }
                         onDismiss()
                     },
                     enabled = name.isNotBlank() && selectedDays.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth()
-                ) { Text("Oluştur") }
+                ) { Text(if (templateToEdit != null) "Kaydet" else "Oluştur") }
             }
         }
     }
