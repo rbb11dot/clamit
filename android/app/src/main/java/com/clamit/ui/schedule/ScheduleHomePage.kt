@@ -255,7 +255,12 @@ fun ScheduleHomePage(
                                         block = block,
                                         onToggleSubtask = { viewModel.toggleSubtask(block.timeBlockId, it) },
                                         onSetCompleted = { viewModel.setManualStatus(block.timeBlockId, "completed") },
-                                        onSetNotCompleted = { viewModel.setManualStatus(block.timeBlockId, "not_completed") }
+                                        onSetNotCompleted = { viewModel.setManualStatus(block.timeBlockId, "not_completed") },
+                                        onRemoveFromDay = if (entry.isSpecial) {
+                                            { viewModel.removeSpecialBlockFromDay(block.timeBlockId) }
+                                        } else {
+                                            null
+                                        }
                                     )
                                 }
                             }

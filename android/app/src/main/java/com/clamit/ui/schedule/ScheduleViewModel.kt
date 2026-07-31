@@ -303,6 +303,22 @@ class ScheduleViewModel(
         }
     }
 
+    /** Removes a block from the current (special) day only; the library block stays. */
+    fun removeSpecialBlockFromDay(blockId: String) {
+        if (mutating) return
+        mutating = true
+        viewModelScope.launch {
+            try {
+                repository.removeSpecialBlock(currentDateStr(), blockId)
+                load()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = e.message)
+            } finally {
+                mutating = false
+            }
+        }
+    }
+
     fun deleteTemplate(templateId: String) {
         if (mutating) return
         mutating = true

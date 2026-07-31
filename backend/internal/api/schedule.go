@@ -50,6 +50,7 @@ func (h *ScheduleHandler) RegisterRoutes(mux *http.ServeMux) {
 	// Status
 	mux.HandleFunc("PUT /api/schedule/{date}/block/{bid}/toggle", h.toggleSubtask)
 	mux.HandleFunc("PATCH /api/schedule/{date}/block/{bid}/manual", h.updateManualStatus)
+	mux.HandleFunc("PATCH /api/schedule/{date}/block/{bid}/auto", h.updateAutoStatus)
 }
 
 // ---- Templates ----
@@ -381,6 +382,23 @@ func (h *ScheduleHandler) updateManualStatus(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// updateAutoStatus recomputes the auto status for one block based on the current
+// time (same transitions as the periodic updater) and persists it.
+func (h *ScheduleHandler) updateAutoStatus(w http.ResponseWriter, r *http.Request) {
+	date := r.PathValue("date")
+	if !validateDate(date) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid date"})
+		return
+	}
+	bid := r.PathValue("bid")
+	status, err := h.repo.RecomputeAutoStatus(r.Context(), date, bid)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": status})
 }
 
 // ---- Helpers ----

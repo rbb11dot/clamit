@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -29,8 +30,10 @@ fun TimeBlockCard(
     block: BlockState,
     onToggleSubtask: (String) -> Unit,
     onSetCompleted: () -> Unit,
-    onSetNotCompleted: () -> Unit
+    onSetNotCompleted: () -> Unit,
+    onRemoveFromDay: (() -> Unit)? = null
 ) {
+    var confirmRemove by remember { mutableStateOf(false) }
     val isCompleted = block.manualStatus == "completed"
     val isInProgress = block.autoStatus == "in_progress"
 
@@ -85,7 +88,10 @@ fun TimeBlockCard(
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 0.sp,
-                    color = nodeColor
+                    color = nodeColor,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    softWrap = true
                 )
                 Spacer(Modifier.height(6.dp))
                 // Node on the spine
@@ -168,6 +174,19 @@ fun TimeBlockCard(
                             color = nodeColor
                         )
                     }
+
+                    // Remove from day (special days only): re-addable from the library
+                    if (onRemoveFromDay != null) {
+                        Spacer(Modifier.width(4.dp))
+                        IconButton(onClick = { confirmRemove = true }, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Günden kaldır",
+                                tint = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                 }
 
                 // Subtasks
@@ -197,7 +216,7 @@ fun TimeBlockCard(
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = if (subtask.done) FontWeight.Normal else FontWeight.Medium,
                                     textDecoration = if (subtask.done) TextDecoration.LineThrough else TextDecoration.None,
-                                    color = if (subtask.done) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+                                    color = if (subtask.done) MaterialTheme.colorScheme.onSurfaceVariant
                                     else MaterialTheme.colorScheme.onSurface
                                 )
                             }
@@ -237,6 +256,29 @@ fun TimeBlockCard(
                 }
             }
         }
+    }
+
+    if (confirmRemove && onRemoveFromDay != null) {
+        AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text("Günden kaldır", fontWeight = FontWeight.Bold) },
+            text = { Text("\"${block.name}\" bu günden kaldırılacak. Blok kütüphanede durmaya devam eder. Bu günün durumu (tamamlanma/toggle) kaybolur.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmRemove = false
+                        onRemoveFromDay()
+                    }
+                ) {
+                    Text("Kaldır", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmRemove = false }) {
+                    Text("Vazgeç")
+                }
+            }
+        )
     }
 }
 

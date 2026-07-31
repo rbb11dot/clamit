@@ -658,6 +658,58 @@ func (r *ScheduleRepo) UpdateAutoStatus(ctx context.Context, date string, blockI
 	return err
 }
 
+// RecomputeAutoStatus computes the auto status for one block from the current time
+// (same transitions as the periodic updater) and persists it. Returns the status.
+func (r *ScheduleRepo) RecomputeAutoStatus(ctx context.Context, date string, blockID string) (string, error) {
+	var mode, startTime string
+	var endTime sql.NullString
+	var duration sql.NullInt64
+	err := r.db.QueryRowContext(ctx,
+		`SELECT mode, start_time, end_time, duration_min FROM time_blocks WHERE id = ?`, blockID).
+		Scan(&mode, &startTime, &endTime, &duration)
+	if err != nil {
+		return "", fmt.Errorf("recompute auto status: get block: %w", err)
+	}
+
+	now := time.Now()
+	current := now.Format("15:04")
+	status := "pending"
+	if startTime <= current {
+		if mode == "start_end" && endTime.Valid {
+			if endTime.String <= current {
+				status = "completed"
+			} else {
+				status = "in_progress"
+			}
+		} else if mode == "start_duration" && duration.Valid && duration.Int64 > 0 {
+			start, perr := time.Parse("15:04", startTime)
+			if perr != nil {
+				return "", fmt.Errorf("recompute auto status: parse start: %w", perr)
+			}
+			end := start.Add(time.Duration(duration.Int64) * time.Minute).Format("15:04")
+			if end <= current {
+				status = "completed"
+			} else {
+				status = "in_progress"
+			}
+		} else {
+			status = "in_progress"
+		}
+	}
+
+	entry, err := r.GetOrCreateEntry(ctx, date)
+	if err != nil {
+		return "", err
+	}
+	_, err = r.db.ExecContext(ctx,
+		`UPDATE time_block_states SET auto_status=? WHERE entry_id=? AND time_block_id=?`,
+		status, entry.ID, blockID)
+	if err != nil {
+		return "", fmt.Errorf("recompute auto status: update: %w", err)
+	}
+	return status, nil
+}
+
 func (r *ScheduleRepo) UpdateManualStatus(ctx context.Context, date string, blockID string, status string) error {
 	entry, err := r.GetOrCreateEntry(ctx, date)
 	if err != nil {
