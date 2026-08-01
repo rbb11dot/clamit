@@ -25,11 +25,17 @@ func (h *ScheduleHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/templates/{id}", h.updateTemplate)
 	mux.HandleFunc("DELETE /api/templates/{id}", h.deleteTemplate)
 
-	// Blocks
-	mux.HandleFunc("POST /api/templates/{tid}/blocks", h.createBlock)
+	// Blocks — the library. Blocks are standalone; templates reference them
+	// through the junction (many-to-many).
+	mux.HandleFunc("POST /api/blocks", h.createBlock)
+	mux.HandleFunc("GET /api/blocks", h.listBlocks)
 	mux.HandleFunc("PUT /api/blocks/{bid}", h.updateBlock)
 	mux.HandleFunc("DELETE /api/blocks/{bid}", h.deleteBlock)
-	mux.HandleFunc("PUT /api/blocks/{bid}/order", h.reorderBlocks)
+
+	// Template ↔ block associations
+	mux.HandleFunc("PUT /api/templates/{tid}/blocks", h.addTemplateBlock)
+	mux.HandleFunc("PUT /api/templates/{tid}/blocks/order", h.reorderBlocks)
+	mux.HandleFunc("DELETE /api/templates/{tid}/blocks/{bid}", h.removeTemplateBlock)
 
 	// Subtasks
 	mux.HandleFunc("POST /api/blocks/{bid}/subtasks", h.createSubtask)
@@ -130,18 +136,29 @@ func (h *ScheduleHandler) deleteTemplate(w http.ResponseWriter, r *http.Request)
 // ---- Blocks ----
 
 func (h *ScheduleHandler) createBlock(w http.ResponseWriter, r *http.Request) {
-	tid := r.PathValue("tid")
 	var req models.CreateBlockReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
 		return
 	}
-	block, err := h.repo.CreateBlock(r.Context(), tid, req)
+	block, err := h.repo.CreateBlock(r.Context(), req)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusCreated, block)
+}
+
+func (h *ScheduleHandler) listBlocks(w http.ResponseWriter, r *http.Request) {
+	blocks, err := h.repo.ListLibraryBlocks(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if blocks == nil {
+		blocks = []models.TimeBlock{}
+	}
+	writeJSON(w, http.StatusOK, blocks)
 }
 
 func (h *ScheduleHandler) updateBlock(w http.ResponseWriter, r *http.Request) {
@@ -173,17 +190,43 @@ func (h *ScheduleHandler) deleteBlock(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ScheduleHandler) reorderBlocks(w http.ResponseWriter, r *http.Request) {
-	// bid is not used directly; body contains the ordered IDs
+	tid := r.PathValue("tid")
 	var req models.ReorderReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
 		return
 	}
-	if err := h.repo.ReorderBlocks(r.Context(), req.IDs); err != nil {
+	if err := h.repo.ReorderTemplateBlocks(r.Context(), tid, req.IDs); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *ScheduleHandler) addTemplateBlock(w http.ResponseWriter, r *http.Request) {
+	tid := r.PathValue("tid")
+	var req struct {
+		BlockID string `json:"blockId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	if err := h.repo.AddTemplateBlock(r.Context(), tid, req.BlockID); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *ScheduleHandler) removeTemplateBlock(w http.ResponseWriter, r *http.Request) {
+	tid := r.PathValue("tid")
+	bid := r.PathValue("bid")
+	if err := h.repo.RemoveTemplateBlock(r.Context(), tid, bid); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ---- Subtasks ----

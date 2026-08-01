@@ -27,7 +27,6 @@ type UpdateTemplateReq struct {
 
 type TimeBlock struct {
 	ID          string    `json:"id"`
-	TemplateID  string    `json:"templateId"`
 	Name        string    `json:"name"`
 	Icon        string    `json:"icon"`
 	Mode        string    `json:"mode"` // "start_end" | "start_duration"

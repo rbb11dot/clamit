@@ -59,15 +59,30 @@ func migrate(db *sql.DB) error {
 }
 
 // ensureDayOwnedBlocks upgrades time_blocks so that a special day can own its own
-// snapshot of blocks (copy-on-write). Existing databases still have the old
-// NOT NULL template_id schema; rebuild the table idempotently, guarded by column
-// inspection rather than a version number (migrations rerun on every start).
+// snapshot of blocks (copy-on-write), and migrates the old single-owner
+// template_id schema to the many-to-many library model:
+//   - template_blocks junction always exists (blocks belong to 0..N templates)
+//   - legacy template_id rows are backfilled into the junction (idempotent)
+//   - time_blocks is rebuilt without template_id, and with entry_id for
+//     day-owned snapshot rows when it is missing
+// Guarded by column inspection rather than a version number (migrations rerun
+// on every start).
 func ensureDayOwnedBlocks(db *sql.DB) error {
+	// Junction must exist even on databases migrated before it was introduced.
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS template_blocks (
+		template_id TEXT NOT NULL REFERENCES day_templates(id) ON DELETE CASCADE,
+		block_id TEXT NOT NULL REFERENCES time_blocks(id) ON DELETE CASCADE,
+		block_order INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (template_id, block_id)
+	)`); err != nil {
+		return fmt.Errorf("ensure template_blocks: %w", err)
+	}
+
 	cols, err := db.Query(`SELECT name FROM pragma_table_info('time_blocks')`)
 	if err != nil {
 		return fmt.Errorf("inspect time_blocks: %w", err)
 	}
-	hasEntryID := false
+	hasEntryID, hasTemplateID := false, false
 	for cols.Next() {
 		var name string
 		if err := cols.Scan(&name); err != nil {
@@ -77,17 +92,29 @@ func ensureDayOwnedBlocks(db *sql.DB) error {
 		if name == "entry_id" {
 			hasEntryID = true
 		}
+		if name == "template_id" {
+			hasTemplateID = true
+		}
 	}
 	cols.Close()
-	if hasEntryID {
-		// Index may be missing on databases migrated before the rebuild path existed.
+
+	if !hasTemplateID {
+		// Fresh schema (001) or already migrated: nothing to rebuild.
 		if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_time_blocks_entry ON time_blocks(entry_id)`); err != nil {
 			return fmt.Errorf("ensure entry index: %w", err)
 		}
 		return nil
 	}
 
-	log.Println("db: migrating time_blocks to day-owned schema")
+	// Legacy database: backfill the junction, then rebuild without template_id.
+	if _, err := db.Exec(`
+		INSERT OR IGNORE INTO template_blocks (template_id, block_id, block_order)
+		SELECT template_id, id, block_order FROM time_blocks WHERE template_id IS NOT NULL
+	`); err != nil {
+		return fmt.Errorf("backfill template_blocks: %w", err)
+	}
+	log.Println("db: migrating time_blocks to library + day-owned schema")
+
 	conn, err := db.Conn(context.Background())
 	if err != nil {
 		return fmt.Errorf("acquire conn: %w", err)
@@ -103,33 +130,44 @@ func ensureDayOwnedBlocks(db *sql.DB) error {
 		_, _ = conn.ExecContext(context.Background(), `PRAGMA foreign_keys=ON`)
 	}()
 
-	const rebuild = `
-BEGIN;
-CREATE TABLE time_blocks_new (
-    id TEXT PRIMARY KEY,
-    template_id TEXT REFERENCES day_templates(id) ON DELETE CASCADE,
-    entry_id TEXT REFERENCES schedule_entries(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    icon TEXT NOT NULL DEFAULT '',
-    mode TEXT NOT NULL CHECK(mode IN ('start_end','start_duration')),
-    start_time TEXT NOT NULL,
-    end_time TEXT,
-    duration_min INTEGER,
-    block_order INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    CHECK ((template_id IS NULL) != (entry_id IS NULL))
-);
-INSERT INTO time_blocks_new (id, template_id, entry_id, name, icon, mode, start_time, end_time, duration_min, block_order, created_at)
-    SELECT id, template_id, NULL, name, icon, mode, start_time, end_time, duration_min, block_order, created_at
-    FROM time_blocks;
+	const newTable = `CREATE TABLE time_blocks_new (
+		id TEXT PRIMARY KEY,
+		entry_id TEXT REFERENCES schedule_entries(id) ON DELETE CASCADE,
+		name TEXT NOT NULL,
+		icon TEXT NOT NULL DEFAULT '',
+		mode TEXT NOT NULL CHECK(mode IN ('start_end','start_duration')),
+		start_time TEXT NOT NULL,
+		end_time TEXT,
+		duration_min INTEGER,
+		block_order INTEGER NOT NULL DEFAULT 0,
+		created_at TEXT NOT NULL DEFAULT (datetime('now'))
+	)`
+	copyCols := "name, icon, mode, start_time, end_time, duration_min, block_order, created_at"
+	if hasEntryID {
+		// entry_id exists: carry it over and just drop template_id.
+		rebuild := `BEGIN;` + newTable + `;
+INSERT INTO time_blocks_new (id, entry_id, ` + copyCols + `)
+	SELECT id, entry_id, ` + copyCols + ` FROM time_blocks;
 DROP TABLE time_blocks;
 ALTER TABLE time_blocks_new RENAME TO time_blocks;
-CREATE INDEX idx_time_blocks_template ON time_blocks(template_id);
 CREATE INDEX idx_time_blocks_entry ON time_blocks(entry_id);
 COMMIT;`
-	if _, err := conn.ExecContext(context.Background(), rebuild); err != nil {
-		return fmt.Errorf("rebuild time_blocks: %w", err)
+		if _, err := conn.ExecContext(context.Background(), rebuild); err != nil {
+			return fmt.Errorf("rebuild time_blocks: %w", err)
+		}
+	} else {
+		// Pre-entry_id legacy: the rebuild introduces day-owned blocks.
+		rebuild := `BEGIN;` + newTable + `;
+INSERT INTO time_blocks_new (id, ` + copyCols + `)
+	SELECT id, ` + copyCols + ` FROM time_blocks;
+DROP TABLE time_blocks;
+ALTER TABLE time_blocks_new RENAME TO time_blocks;
+CREATE INDEX idx_time_blocks_entry ON time_blocks(entry_id);
+COMMIT;`
+		if _, err := conn.ExecContext(context.Background(), rebuild); err != nil {
+			return fmt.Errorf("rebuild time_blocks: %w", err)
+		}
 	}
-	log.Println("db: time_blocks migrated (day-owned blocks enabled)")
+	log.Println("db: time_blocks migrated (library + day-owned blocks enabled)")
 	return nil
 }
