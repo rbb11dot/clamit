@@ -5,7 +5,9 @@ plugins {
 
 android {
     namespace = "com.clamit"
-    compileSdk = 35
+    // compileSdk 37 required by compose 1.12.0-beta01 (lint: ui-android dependency check).
+    // targetSdk stays 35 — raising it would force edge-to-edge enforcement (separate task).
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.clamit"
@@ -46,10 +48,11 @@ android {
 }
 
 dependencies {
-    implementation(platform("androidx.compose:compose-bom:2026.06.01"))
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.ui:ui-tooling-preview")
+    // Material 3 Expressive (alpha25) requires compose 1.12.0-beta01; the BOM
+    // (compose 1.11.4) is incompatible with it, so versions are pinned explicitly.
+    implementation("androidx.compose.ui:ui:1.12.0-beta01")
+    implementation("androidx.compose.material3:material3:1.5.0-alpha25")
+    implementation("androidx.compose.ui:ui-tooling-preview:1.12.0-beta01")
     implementation("androidx.activity:activity-compose:1.10.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.0")
@@ -66,9 +69,9 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     // Material icons extended
-    implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.compose.material:material-icons-extended:1.7.8")
 
-    debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-tooling:1.12.0-beta01")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
