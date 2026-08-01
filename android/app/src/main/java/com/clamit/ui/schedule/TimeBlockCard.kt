@@ -1,7 +1,6 @@
 package com.clamit.ui.schedule
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,7 +24,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.clamit.data.model.BlockState
-import com.clamit.ui.theme.ClamitColors
+import com.clamit.ui.theme.ClamitStatusColors
 
 @Composable
 fun TimeBlockCard(
@@ -42,14 +41,14 @@ fun TimeBlockCard(
 
     // Status node language: filled amber = in progress, filled teal = completed, hollow = pending
     val nodeColor = when {
-        isCompleted -> ClamitColors.CompletedTeal
-        isInProgress -> ClamitColors.SignalAmber
-        else -> ClamitColors.PendingTeal
+        isCompleted -> ClamitStatusColors.CompletedTeal
+        isInProgress -> ClamitStatusColors.SignalAmber
+        else -> ClamitStatusColors.PendingTeal
     }
     val containerColor = when {
-        isCompleted -> ClamitColors.CompletedBg
-        isInProgress -> ClamitColors.SignalAmberBg
-        else -> ClamitColors.PendingBg
+        isCompleted -> ClamitStatusColors.CompletedBg
+        isInProgress -> ClamitStatusColors.SignalAmberBg
+        else -> ClamitStatusColors.PendingBg
     }
     val labelText = when {
         isCompleted -> "Tamamlandı"
@@ -62,23 +61,10 @@ fun TimeBlockCard(
         else MaterialTheme.colorScheme.surfaceContainerLow,
         label = "stopBg"
     )
-    val animatedElevation by animateDpAsState(
-        targetValue = if (isInProgress) 2.dp else 0.dp,
-        label = "stopElevation"
-    )
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .border(
-                width = 1.dp,
-                color = if (isInProgress) nodeColor.copy(alpha = 0.55f)
-                else MaterialTheme.colorScheme.outlineVariant,
-                shape = RoundedCornerShape(18.dp)
-            ),
-        colors = CardDefaults.cardColors(containerColor = animatedBg),
-        elevation = CardDefaults.cardElevation(defaultElevation = animatedElevation)
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = animatedBg)
     ) {
         Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp)) {
             // ===== Rail: time + spine + node =====
@@ -250,7 +236,6 @@ fun TimeBlockCard(
                     if (!isCompleted) {
                         FilledTonalButton(
                             onClick = onSetCompleted,
-                            shape = RoundedCornerShape(10.dp),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                             modifier = Modifier.height(34.dp)
                         ) {
@@ -261,7 +246,6 @@ fun TimeBlockCard(
                     } else {
                         OutlinedButton(
                             onClick = onSetNotCompleted,
-                            shape = RoundedCornerShape(10.dp),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                             modifier = Modifier.height(34.dp)
                         ) {

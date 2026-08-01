@@ -6,15 +6,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -26,7 +23,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ScheduleHomePage(
     viewModel: ScheduleViewModel,
@@ -46,9 +43,6 @@ fun ScheduleHomePage(
     Scaffold(
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                ),
                 navigationIcon = {
                     IconButton(onClick = onMenuClick) {
                         Icon(Icons.Default.Menu, contentDescription = "Menü")
@@ -64,36 +58,28 @@ fun ScheduleHomePage(
                 },
                 actions = {
                     // Template chip: tappable label showing the active template name.
-                    // A plain surface — FilterChip's selected state has no meaning here.
-                    Surface(
+                    // Shape-morphing FilterChip; selected state stays off (tapping opens
+                    // the picker instead of toggling).
+                    FilterChip(
+                        selected = false,
                         onClick = onTemplatePicker,
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            MaterialTheme.colorScheme.outlineVariant
-                        ),
-                        modifier = Modifier.height(32.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Schedule,
-                                contentDescription = "Şablon seç",
-                                modifier = Modifier.size(15.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(Modifier.width(6.dp))
+                        label = {
                             Text(
                                 activeTemplateName,
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                fontWeight = FontWeight.SemiBold
                             )
-                        }
-                    }
+                        },
+                        shapes = FilterChipDefaults.shapes(),
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Schedule,
+                                contentDescription = "Şablon seç",
+                                modifier = Modifier.size(15.dp)
+                            )
+                        },
+                        modifier = Modifier.height(32.dp)
+                    )
                     Spacer(Modifier.width(4.dp))
                     IconButton(onClick = viewModel::goToToday) {
                         Icon(Icons.Default.Today, contentDescription = "Bugün")
@@ -103,11 +89,7 @@ fun ScheduleHomePage(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = onAddBlock,
-                shape = RoundedCornerShape(18.dp),
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                elevation = FloatingActionButtonDefaults.elevation(4.dp)
+                onClick = onAddBlock
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Blok ekle")
             }
@@ -125,12 +107,7 @@ fun ScheduleHomePage(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .border(
-                        1.dp,
-                        MaterialTheme.colorScheme.outlineVariant,
-                        RoundedCornerShape(20.dp)
-                    )
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -203,7 +180,7 @@ fun ScheduleHomePage(
             ) {
                 when {
                     uiState.isLoading -> {
-                        CircularProgressIndicator(
+                        LoadingIndicator(
                             modifier = Modifier.align(Alignment.Center),
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -235,8 +212,7 @@ fun ScheduleHomePage(
                             )
                             Spacer(Modifier.height(16.dp))
                             Button(
-                                onClick = viewModel::load,
-                                shape = RoundedCornerShape(12.dp)
+                                onClick = viewModel::load
                             ) {
                                 Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(Modifier.width(8.dp))
@@ -287,7 +263,6 @@ private fun EmptyDayState(onAddBlock: () -> Unit) {
         verticalArrangement = Arrangement.Center
     ) {
         Surface(
-            shape = RoundedCornerShape(22.dp),
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             modifier = Modifier.size(72.dp)
         ) {
