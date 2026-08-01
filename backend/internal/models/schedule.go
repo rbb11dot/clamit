@@ -48,12 +48,22 @@ type CreateBlockReq struct {
 	Subtasks    []SubtaskReq `json:"subtasks,omitempty"`
 }
 
+// SubtaskSync is one entry of a full subtask save: an existing subtask id
+// (nil = create a new subtask) plus the name. Order in the slice is the new
+// subtask order; subtasks not listed are deleted.
+type SubtaskSync struct {
+	ID   *string `json:"id,omitempty"`
+	Name string  `json:"name"`
+}
+
 type UpdateBlockReq struct {
-	Name        *string `json:"name,omitempty"`
-	Icon        *string `json:"icon,omitempty"`
-	StartTime   *string `json:"startTime,omitempty"`
-	EndTime     *string `json:"endTime,omitempty"`
-	DurationMin *int    `json:"durationMin,omitempty"`
+	Name        *string       `json:"name,omitempty"`
+	Icon        *string       `json:"icon,omitempty"`
+	Mode        *string       `json:"mode,omitempty"`
+	StartTime   *string       `json:"startTime,omitempty"`
+	EndTime     *string       `json:"endTime,omitempty"`
+	DurationMin *int          `json:"durationMin,omitempty"`
+	Subtasks    []SubtaskSync `json:"subtasks,omitempty"`
 }
 
 type ReorderReq struct {
