@@ -92,20 +92,11 @@ func (h *ScheduleHandler) getTemplate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 		return
 	}
-	// Also load blocks
-	blocks, err := h.repo.ListBlocks(r.Context(), id)
-	if err != nil {
-		writeJSON(w, http.StatusOK, tmpl)
-		return
+	// Blocks ride on the template itself (DayTemplate.Blocks), loaded by the repo.
+	if tmpl.Blocks == nil {
+		tmpl.Blocks = []models.TimeBlock{}
 	}
-	if blocks == nil {
-		blocks = []models.TimeBlock{}
-	}
-	type templateWithBlocks struct {
-		models.DayTemplate
-		Blocks []models.TimeBlock `json:"blocks"`
-	}
-	writeJSON(w, http.StatusOK, templateWithBlocks{*tmpl, blocks})
+	writeJSON(w, http.StatusOK, tmpl)
 }
 
 func (h *ScheduleHandler) updateTemplate(w http.ResponseWriter, r *http.Request) {

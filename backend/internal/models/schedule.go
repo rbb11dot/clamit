@@ -3,11 +3,12 @@ package models
 // ---- Day Template ----
 
 type DayTemplate struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Icon       string `json:"icon"`
-	RepeatDays []int  `json:"repeatDays"`
-	CreatedAt  string `json:"createdAt"`
+	ID         string      `json:"id"`
+	Name       string      `json:"name"`
+	Icon       string      `json:"icon"`
+	RepeatDays []int       `json:"repeatDays"`
+	Blocks     []TimeBlock `json:"blocks"`
+	CreatedAt  string      `json:"createdAt"`
 }
 
 type CreateTemplateReq struct {
