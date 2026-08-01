@@ -693,6 +693,93 @@ func (r *ScheduleRepo) SetEntryTemplate(ctx context.Context, date string, templa
 	return r.GetEntry(ctx, date)
 }
 
+// ---- Template → special-day adoption ----
+// Days that were materialized as special days before their template existed
+// silently miss the template. These helpers list such days for a template's
+// repeat days and convert them into template-linked days on demand.
+
+// ListSpecialDaysForTemplate returns the ISO dates of special days (no
+// template) whose weekday matches the template's repeatDays, ordered by date.
+func (r *ScheduleRepo) ListSpecialDaysForTemplate(ctx context.Context, templateID string) ([]string, error) {
+	tmpl, err := r.GetTemplate(ctx, templateID)
+	if err != nil {
+		return nil, err
+	}
+	if tmpl == nil {
+		return nil, nil
+	}
+
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT date FROM schedule_entries WHERE is_special = 1 AND template_id IS NULL ORDER BY date`)
+	if err != nil {
+		return nil, fmt.Errorf("list special days: %w", err)
+	}
+	defer rows.Close()
+
+	repeat := make(map[int]bool, len(tmpl.RepeatDays))
+	for _, d := range tmpl.RepeatDays {
+		repeat[d] = true
+	}
+
+	var dates []string
+	for rows.Next() {
+		var date string
+		if err := rows.Scan(&date); err != nil {
+			return nil, fmt.Errorf("list special days: scan: %w", err)
+		}
+		t, perr := time.Parse("2006-01-02", date)
+		if perr != nil {
+			continue
+		}
+		if repeat[int(t.Weekday())] {
+			dates = append(dates, date)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list special days: %w", err)
+	}
+	return dates, nil
+}
+
+// ApplyTemplateToDates converts the given dates into template-linked days: the
+// day's special content is dropped (copy-on-write snapshot discarded) and the
+// template's blocks and states are rebuilt. Only days that are currently special
+// and whose weekday matches the template's repeatDays are converted; everything
+// else is skipped. Returns the number of days converted.
+func (r *ScheduleRepo) ApplyTemplateToDates(ctx context.Context, templateID string, dates []string) (int, error) {
+	tmpl, err := r.GetTemplate(ctx, templateID)
+	if err != nil {
+		return 0, err
+	}
+	if tmpl == nil {
+		return 0, nil
+	}
+	repeat := make(map[int]bool, len(tmpl.RepeatDays))
+	for _, d := range tmpl.RepeatDays {
+		repeat[d] = true
+	}
+
+	applied := 0
+	for _, date := range dates {
+		t, perr := time.Parse("2006-01-02", date)
+		if perr != nil || !repeat[int(t.Weekday())] {
+			continue
+		}
+		entry, err := r.GetEntry(ctx, date)
+		if err != nil {
+			return applied, err
+		}
+		if entry == nil || !entry.IsSpecial {
+			continue
+		}
+		if _, err := r.SetEntryTemplate(ctx, date, &templateID); err != nil {
+			return applied, fmt.Errorf("apply template to %s: %w", date, err)
+		}
+		applied++
+	}
+	return applied, nil
+}
+
 func (r *ScheduleRepo) AddSpecialBlock(ctx context.Context, date string, blockID string) error {
 	entry, err := r.GetOrCreateEntry(ctx, date)
 	if err != nil {

@@ -25,6 +25,11 @@ func (h *ScheduleHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/templates/{id}", h.updateTemplate)
 	mux.HandleFunc("DELETE /api/templates/{id}", h.deleteTemplate)
 
+	// Template → special-day adoption: days materialized as special before
+	// the template existed can be listed and converted on demand.
+	mux.HandleFunc("GET /api/templates/{id}/special-days", h.listTemplateSpecialDays)
+	mux.HandleFunc("POST /api/templates/{id}/apply", h.applyTemplateToDates)
+
 	// Blocks — the library. Blocks are standalone; templates reference them
 	// through the junction (many-to-many).
 	mux.HandleFunc("POST /api/blocks", h.createBlock)
@@ -122,6 +127,47 @@ func (h *ScheduleHandler) updateTemplate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusOK, tmpl)
+}
+
+// listTemplateSpecialDays returns ISO dates of special days whose weekday
+// matches the template's repeatDays — days that would adopt the template if
+// the user applies it.
+func (h *ScheduleHandler) listTemplateSpecialDays(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	dates, err := h.repo.ListSpecialDaysForTemplate(r.Context(), id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if dates == nil {
+		dates = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"dates": dates})
+}
+
+// applyTemplateToDates converts the listed special days into template-linked
+// days. Non-special dates are skipped. Returns how many days were converted.
+func (h *ScheduleHandler) applyTemplateToDates(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var req struct {
+		Dates []string `json:"dates"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	for _, d := range req.Dates {
+		if !validateDate(d) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid date: " + d})
+			return
+		}
+	}
+	applied, err := h.repo.ApplyTemplateToDates(r.Context(), id, req.Dates)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"applied": applied})
 }
 
 func (h *ScheduleHandler) deleteTemplate(w http.ResponseWriter, r *http.Request) {
