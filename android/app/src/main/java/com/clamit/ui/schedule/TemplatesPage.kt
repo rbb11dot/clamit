@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.clamit.data.model.DayTemplate
 import com.clamit.data.model.TimeBlock
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -292,13 +293,20 @@ fun TemplateEditorPage(
         }
     }
     var showBlockPicker by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    // Blocks picked for a not-yet-created template (create mode).
+    var pendingBlocks by remember { mutableStateOf(listOf<TimeBlock>()) }
 
     // The template's current blocks, refreshed from uiState after each attach.
     val currentBlocks = remember(templateToEdit, uiState.templates) {
         uiState.templates.find { it.id == templateToEdit?.id }?.blocks ?: templateToEdit?.blocks ?: emptyList()
     }
-    val availableBlocks = remember(currentBlocks, uiState.libraryBlocks) {
-        uiState.libraryBlocks.filter { lib -> currentBlocks.none { it.id == lib.id } }
+    // Section rows: live membership when editing, selected-for-attach when creating.
+    val sectionBlocks = if (templateToEdit != null) currentBlocks else pendingBlocks
+    val availableBlocks = remember(sectionBlocks, uiState.libraryBlocks) {
+        uiState.libraryBlocks.filter { lib -> sectionBlocks.none { it.id == lib.id } }
     }
 
     val dayNames = listOf("Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi")
@@ -394,69 +402,73 @@ fun TemplateEditorPage(
             }
 
 			// Block management (edit mode only — a new template has no id yet).
-			if (templateToEdit != null) {
-				item {
-					Text(
-						"Zaman Blokları",
-						style = MaterialTheme.typography.titleSmall,
-						fontWeight = FontWeight.Bold
-					)
-					Spacer(Modifier.height(8.dp))
-					Card(
-						shape = RoundedCornerShape(16.dp),
-						colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
-					) {
-						Column(modifier = Modifier.padding(12.dp)) {
-							if (currentBlocks.isEmpty()) {
-								Text(
-									"Bu şablonda henüz blok yok.",
-									style = MaterialTheme.typography.bodySmall,
-									color = MaterialTheme.colorScheme.onSurfaceVariant
-								)
-							} else {
-								currentBlocks.forEach { block ->
-									Row(
-										verticalAlignment = Alignment.CenterVertically,
-										modifier = Modifier
+			item {
+				Text(
+					"Zaman Blokları",
+					style = MaterialTheme.typography.titleSmall,
+					fontWeight = FontWeight.Bold
+				)
+				Spacer(Modifier.height(8.dp))
+				Card(
+					shape = RoundedCornerShape(16.dp),
+					colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+				) {
+					Column(modifier = Modifier.padding(12.dp)) {
+						if (sectionBlocks.isEmpty()) {
+							Text(
+								if (templateToEdit != null) "Bu şablonda henüz blok yok." else "Henüz blok seçilmedi.",
+								style = MaterialTheme.typography.bodySmall,
+								color = MaterialTheme.colorScheme.onSurfaceVariant
+							)
+						} else {
+							sectionBlocks.forEach { block ->
+								Row(
+									verticalAlignment = Alignment.CenterVertically,
+									modifier = Modifier
 											.fillMaxWidth()
 											.padding(vertical = 2.dp)
+								) {
+									Icon(
+										ScheduleIcons.getIconOrDefault(block.icon),
+										contentDescription = null,
+										tint = MaterialTheme.colorScheme.primary,
+										modifier = Modifier.size(20.dp)
+									)
+									Spacer(Modifier.width(10.dp))
+									Text(
+										block.name,
+										style = MaterialTheme.typography.bodyMedium,
+										modifier = Modifier.weight(1f)
+									)
+									IconButton(
+										onClick = {
+											if (templateToEdit != null) {
+												viewModel.removeTemplateBlock(templateToEdit.id, block.id)
+											} else {
+												pendingBlocks = pendingBlocks.filterNot { it.id == block.id }
+											}
+										},
+										modifier = Modifier.size(32.dp)
 									) {
 										Icon(
-											ScheduleIcons.getIconOrDefault(block.icon),
-											contentDescription = null,
-											tint = MaterialTheme.colorScheme.primary,
-											modifier = Modifier.size(20.dp)
+											Icons.Default.Close,
+											contentDescription = "Şablondan kaldır",
+											tint = MaterialTheme.colorScheme.error,
+											modifier = Modifier.size(18.dp)
 										)
-										Spacer(Modifier.width(10.dp))
-										Text(
-											block.name,
-											style = MaterialTheme.typography.bodyMedium,
-											modifier = Modifier.weight(1f)
-										)
-										IconButton(
-											onClick = { viewModel.removeTemplateBlock(templateToEdit.id, block.id) },
-											modifier = Modifier.size(32.dp)
-										) {
-											Icon(
-												Icons.Default.Close,
-												contentDescription = "Şablondan kaldır",
-												tint = MaterialTheme.colorScheme.error,
-												modifier = Modifier.size(18.dp)
-											)
-										}
 									}
 								}
 							}
-							Spacer(Modifier.height(4.dp))
-							OutlinedButton(
-								onClick = { showBlockPicker = true },
-								shape = RoundedCornerShape(12.dp),
-								modifier = Modifier.fillMaxWidth()
-							) {
-								Icon(Icons.Default.Add, contentDescription = null)
-								Spacer(Modifier.width(6.dp))
-								Text("Blok Ekle", fontWeight = FontWeight.SemiBold)
-							}
+						}
+						Spacer(Modifier.height(4.dp))
+						OutlinedButton(
+							onClick = { showBlockPicker = true },
+							shape = RoundedCornerShape(12.dp),
+							modifier = Modifier.fillMaxWidth()
+						) {
+							Icon(Icons.Default.Add, contentDescription = null)
+							Spacer(Modifier.width(6.dp))
+							Text("Blok Ekle", fontWeight = FontWeight.SemiBold)
 						}
 					}
 				}
@@ -467,21 +479,37 @@ fun TemplateEditorPage(
                 Spacer(Modifier.height(8.dp))
                 Button(
                     onClick = {
-                        if (templateToEdit != null) {
-                            viewModel.updateTemplate(templateToEdit.id, name, templateIcon, selectedDays.toList())
-                        } else {
-                            viewModel.createTemplate(name, templateIcon, selectedDays.toList())
+                        if (!saving) {
+                            saving = true
+                            scope.launch {
+                                if (templateToEdit != null) {
+                                    viewModel.updateTemplate(templateToEdit.id, name, templateIcon, selectedDays.toList())
+                                    saving = false
+                                    onDismiss()
+                                } else {
+                                    val tid = viewModel.createTemplateSuspended(name, templateIcon, selectedDays.toList())
+                                    saving = false
+                                    if (tid != null) {
+                                        viewModel.attachBlocksSuspended(tid, pendingBlocks.map { it.id })
+                                        onDismiss()
+                                    }
+                                    // On failure the ViewModel surfaces the error; the editor stays open.
+                                }
+                            }
                         }
-                        onDismiss()
                     },
-                    enabled = name.isNotBlank() && selectedDays.isNotEmpty(),
+                    enabled = name.isNotBlank() && selectedDays.isNotEmpty() && !saving,
                     shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp)
                 ) {
                     Text(
-                        if (templateToEdit != null) "Kaydet" else "Oluştur",
+                        when {
+                            saving -> "Kaydediliyor…"
+                            templateToEdit != null -> "Kaydet"
+                            else -> "Oluştur"
+                        },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -490,7 +518,7 @@ fun TemplateEditorPage(
         }
     }
 
-    if (showBlockPicker && templateToEdit != null) {
+    if (showBlockPicker) {
         AlertDialog(
             onDismissRequest = { showBlockPicker = false },
             title = { Text("Blok Ekle", fontWeight = FontWeight.Bold) },
@@ -506,7 +534,11 @@ fun TemplateEditorPage(
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
                                     .clickable {
-                                        viewModel.addTemplateBlock(templateToEdit.id, block.id)
+                                        if (templateToEdit != null) {
+                                            viewModel.addTemplateBlock(templateToEdit.id, block.id)
+                                        } else {
+                                            pendingBlocks = pendingBlocks + block
+                                        }
                                         showBlockPicker = false
                                     }
                                     .padding(vertical = 8.dp)

@@ -130,7 +130,9 @@ class ScheduleViewModel(
 				durationMin = durationMin,
 				subtasks = subtaskNames.map { SubtaskRequest(it) }
 			)
-			repository.createBlock(req).id
+			val id = repository.createBlock(req).id
+			load() // refresh the library so the new block shows immediately
+			id
 		} catch (e: Exception) {
 			_uiState.value = _uiState.value.copy(
 				error = e.message ?: "Blok oluşturulamadı"
@@ -300,18 +302,31 @@ class ScheduleViewModel(
         }
     }
 
-    fun createTemplate(name: String, icon: String, repeatDays: List<Int>) {
-        if (mutating) return
-        mutating = true
-        viewModelScope.launch {
-            try {
-                repository.createTemplate(CreateTemplateRequest(name, icon, repeatDays))
-                load()
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(error = e.message)
-            } finally {
-                mutating = false
-            }
+    /** Sequential create used by TemplateEditorPage: returns the new id or null. */
+    suspend fun createTemplateSuspended(name: String, icon: String, repeatDays: List<Int>): String? {
+        return try {
+            val id = repository.createTemplate(CreateTemplateRequest(name, icon, repeatDays)).id
+            load()
+            id
+        } catch (e: Exception) {
+            _uiState.value = _uiState.value.copy(
+                error = e.message ?: "Şablon oluşturulamadı"
+            )
+            null
+        }
+    }
+
+    /** Attaches library blocks to a template right after its creation. */
+    suspend fun attachBlocksSuspended(templateId: String, blockIds: List<String>): Boolean {
+        return try {
+            blockIds.forEach { repository.addTemplateBlock(templateId, it) }
+            load()
+            true
+        } catch (e: Exception) {
+            _uiState.value = _uiState.value.copy(
+                error = e.message ?: "Bloklar eklenemedi"
+            )
+            false
         }
     }
 
