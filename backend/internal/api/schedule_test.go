@@ -58,6 +58,26 @@ func doRaw(t *testing.T, method, url, body string, wantStatus int) *http.Respons
 	return resp
 }
 
+// newTemplate attaches a block to a fresh template and returns the template id.
+func newTemplate(t *testing.T, srv *httptest.Server, name string, days string, blockIDs ...string) string {
+	t.Helper()
+	tmpl := doJSON(t, "POST", srv.URL+"/api/templates",
+		fmt.Sprintf(`{"name":"%s","icon":"star","repeatDays":%s}`, name, days), http.StatusCreated)
+	tid := tmpl["id"].(string)
+	for _, bid := range blockIDs {
+		doJSON(t, "PUT", srv.URL+"/api/templates/"+tid+"/blocks",
+			fmt.Sprintf(`{"blockId":"%s"}`, bid), http.StatusOK)
+	}
+	return tid
+}
+
+// newBlock creates a standalone library block and returns its id.
+func newBlock(t *testing.T, srv *httptest.Server, body string) string {
+	t.Helper()
+	block := doJSON(t, "POST", srv.URL+"/api/blocks", body, http.StatusCreated)
+	return block["id"].(string)
+}
+
 func TestHealth(t *testing.T) {
 	srv := newTestServer(t)
 	out := doJSON(t, "GET", srv.URL+"/api/health", "", http.StatusOK)
@@ -113,30 +133,45 @@ func TestTemplateCRUD(t *testing.T) {
 	}
 }
 
-func TestCreateBlockAndSubtask(t *testing.T) {
+func TestBlockLibraryAndTemplateJunction(t *testing.T) {
 	srv := newTestServer(t)
-	tmpl := doJSON(t, "POST", srv.URL+"/api/templates",
-		`{"name":"T","icon":"star","repeatDays":[1]}`, http.StatusCreated)
-	tid := tmpl["id"].(string)
 
-	block := doJSON(t, "POST", srv.URL+"/api/templates/"+tid+"/blocks",
-		`{"name":"Sabah","icon":"coffee","mode":"start_end","startTime":"07:00","endTime":"07:30","subtasks":[{"name":"s1"},{"name":"s2"}]}`,
-		http.StatusCreated)
-	bid := block["id"].(string)
-	if block["name"] != "Sabah" {
-		t.Fatalf("block: %v", block)
+	b1 := newBlock(t, srv, `{"name":"Sabah","icon":"coffee","mode":"start_end","startTime":"07:00","endTime":"07:30","subtasks":[{"name":"s1"},{"name":"s2"}]}`)
+	b2 := newBlock(t, srv, `{"name":"Calisma","mode":"start_duration","startTime":"08:00","durationMin":60}`)
+
+	// Library lists standalone blocks.
+	req, _ := http.NewRequest("GET", srv.URL+"/api/blocks", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lib []map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&lib)
+	resp.Body.Close()
+	if len(lib) != 2 {
+		t.Fatalf("library: %v", lib)
 	}
 
-	sub := doJSON(t, "POST", srv.URL+"/api/blocks/"+bid+"/subtasks",
-		`{"name":"s3"}`, http.StatusCreated)
-	if sub["name"] != "s3" {
-		t.Fatalf("subtask: %v", sub)
+	// Attach b1 to a template; GET template shows it.
+	tid := newTemplate(t, srv, "T", "[1]", b1)
+	tmpl := doJSON(t, "GET", srv.URL+"/api/templates/"+tid, "", http.StatusOK)
+	blocks := tmpl["blocks"].([]interface{})
+	if len(blocks) != 1 || blocks[0].(map[string]interface{})["name"] != "Sabah" {
+		t.Fatalf("template blocks: %v", blocks)
+	}
+
+	// Detach b1: block stays in the library.
+	resp = doRaw(t, "DELETE", srv.URL+"/api/templates/"+tid+"/blocks/"+b1, "", http.StatusNoContent)
+	resp.Body.Close()
+	tmpl = doJSON(t, "GET", srv.URL+"/api/templates/"+tid, "", http.StatusOK)
+	if len(tmpl["blocks"].([]interface{})) != 0 {
+		t.Fatalf("block not detached: %v", tmpl["blocks"])
 	}
 
 	// Update the block: rename + mode switch.
-	updated := doJSON(t, "PUT", srv.URL+"/api/blocks/"+bid,
-		`{"name":"Sabah v2","mode":"start_duration","durationMin":45}`, http.StatusOK)
-	if updated["name"] != "Sabah v2" || updated["mode"] != "start_duration" {
+	updated := doJSON(t, "PUT", srv.URL+"/api/blocks/"+b2,
+		`{"name":"Calisma v2","mode":"start_end","endTime":"09:00"}`, http.StatusOK)
+	if updated["name"] != "Calisma v2" || updated["mode"] != "start_end" {
 		t.Fatalf("update block: %v", updated)
 	}
 }
@@ -144,11 +179,8 @@ func TestCreateBlockAndSubtask(t *testing.T) {
 func TestGetEntryAutoCreatesAndWeekdayMatches(t *testing.T) {
 	srv := newTestServer(t)
 	// 2026-07-31 is a Friday.
-	tmpl := doJSON(t, "POST", srv.URL+"/api/templates",
-		`{"name":"Haftaici","icon":"briefcase","repeatDays":[5]}`, http.StatusCreated)
-	tid := tmpl["id"].(string)
-	doJSON(t, "POST", srv.URL+"/api/templates/"+tid+"/blocks",
-		`{"name":"A","mode":"start_end","startTime":"07:00","endTime":"07:30"}`, http.StatusCreated)
+	bid := newBlock(t, srv, `{"name":"A","mode":"start_end","startTime":"07:00","endTime":"07:30"}`)
+	tid := newTemplate(t, srv, "Haftaici", "[5]", bid)
 
 	entry := doJSON(t, "GET", srv.URL+"/api/schedule/2026-07-31", "", http.StatusOK)
 	if entry["templateId"] != tid || entry["isSpecial"] != false {
@@ -189,15 +221,12 @@ func TestSetEntryTemplateAndSpecialDay(t *testing.T) {
 
 func TestSpecialBlockAddRemove(t *testing.T) {
 	srv := newTestServer(t)
-	tmpl := doJSON(t, "POST", srv.URL+"/api/templates",
-		`{"name":"T","icon":"star","repeatDays":[5]}`, http.StatusCreated)
-	tid := tmpl["id"].(string)
-	block := doJSON(t, "POST", srv.URL+"/api/templates/"+tid+"/blocks",
-		`{"name":"Extra","mode":"start_end","startTime":"09:00","endTime":"09:30"}`, http.StatusCreated)
-	bid := block["id"].(string)
+	lib := newBlock(t, srv, `{"name":"Lib","mode":"start_end","startTime":"07:00","endTime":"07:30"}`)
+	extra := newBlock(t, srv, `{"name":"Extra","mode":"start_end","startTime":"09:00","endTime":"09:30"}`)
+	tid := newTemplate(t, srv, "T", "[5]", lib)
 
 	doJSON(t, "POST", srv.URL+"/api/schedule/2026-07-31/blocks",
-		fmt.Sprintf(`{"blockId":"%s"}`, bid), http.StatusOK)
+		fmt.Sprintf(`{"blockId":"%s"}`, extra), http.StatusOK)
 
 	entry := doJSON(t, "GET", srv.URL+"/api/schedule/2026-07-31", "", http.StatusOK)
 	if entry["isSpecial"] != true {
@@ -214,18 +243,22 @@ func TestSpecialBlockAddRemove(t *testing.T) {
 	if len(entry["blocks"].([]interface{})) != 1 {
 		t.Fatalf("remove failed: %v", entry)
 	}
+
+	// Template untouched (still holds lib).
+	tmpl := doJSON(t, "GET", srv.URL+"/api/templates/"+tid, "", http.StatusOK)
+	if len(tmpl["blocks"].([]interface{})) != 1 {
+		t.Fatalf("template mutated: %v", tmpl["blocks"])
+	}
 }
 
 func TestToggleSubtaskAndManualStatus(t *testing.T) {
 	srv := newTestServer(t)
-	tmpl := doJSON(t, "POST", srv.URL+"/api/templates",
-		`{"name":"T","icon":"star","repeatDays":[5]}`, http.StatusCreated)
-	tid := tmpl["id"].(string)
-	block := doJSON(t, "POST", srv.URL+"/api/templates/"+tid+"/blocks",
+	block := doJSON(t, "POST", srv.URL+"/api/blocks",
 		`{"name":"A","mode":"start_end","startTime":"07:00","endTime":"07:30","subtasks":[{"name":"s1"}]}`,
 		http.StatusCreated)
 	bid := block["id"].(string)
 	subtaskID := block["subtasks"].([]interface{})[0].(map[string]interface{})["id"].(string)
+	_ = newTemplate(t, srv, "T", "[5]", bid)
 
 	date := "2026-07-31"
 	doJSON(t, "PUT", srv.URL+"/api/schedule/"+date+"/block/"+bid+"/toggle",
@@ -262,19 +295,18 @@ func TestToggleSubtaskAndManualStatus(t *testing.T) {
 
 func TestUpdateEntryBlockDetaches(t *testing.T) {
 	srv := newTestServer(t)
-	tmpl := doJSON(t, "POST", srv.URL+"/api/templates",
-		`{"name":"T","icon":"star","repeatDays":[5]}`, http.StatusCreated)
-	tid := tmpl["id"].(string)
-	block := doJSON(t, "POST", srv.URL+"/api/templates/"+tid+"/blocks",
+	block := doJSON(t, "POST", srv.URL+"/api/blocks",
 		`{"name":"A","mode":"start_end","startTime":"07:00","endTime":"07:30","subtasks":[{"name":"s1"}]}`,
 		http.StatusCreated)
 	bid := block["id"].(string)
+	subtaskID := block["subtasks"].([]interface{})[0].(map[string]interface{})["id"].(string)
+	tid := newTemplate(t, srv, "T", "[5]", bid)
 	date := "2026-07-31"
 	doJSON(t, "GET", srv.URL+"/api/schedule/"+date, "", http.StatusOK)
 
 	// Edit the day's block via the library block id: the day must detach.
 	updated := doJSON(t, "PATCH", srv.URL+"/api/schedule/"+date+"/blocks/"+bid,
-		`{"name":"Day edit","subtasks":[{"id":"`+block["subtasks"].([]interface{})[0].(map[string]interface{})["id"].(string)+`","name":"s1 day"}]}`,
+		`{"name":"Day edit","subtasks":[{"id":"`+subtaskID+`","name":"s1 day"}]}`,
 		http.StatusOK)
 	if updated["isSpecial"] != true {
 		t.Fatalf("day should be special: %v", updated)
@@ -298,17 +330,15 @@ func TestUpdateEntryBlockDetaches(t *testing.T) {
 
 func TestAutoStatusRecompute(t *testing.T) {
 	srv := newTestServer(t)
-	tmpl := doJSON(t, "POST", srv.URL+"/api/templates",
-		`{"name":"T","icon":"star","repeatDays":[5]}`, http.StatusCreated)
-	tid := tmpl["id"].(string)
 	// A block that started 2 minutes ago and ended 1 minute ago → completed.
 	now := time.Now()
 	start := now.Add(-2 * time.Minute).Format("15:04")
 	end := now.Add(-1 * time.Minute).Format("15:04")
-	block := doJSON(t, "POST", srv.URL+"/api/templates/"+tid+"/blocks",
+	block := doJSON(t, "POST", srv.URL+"/api/blocks",
 		fmt.Sprintf(`{"name":"past","mode":"start_end","startTime":"%s","endTime":"%s"}`, start, end),
 		http.StatusCreated)
 	bid := block["id"].(string)
+	_ = newTemplate(t, srv, "T", "[5]", bid)
 	date := "2026-07-31"
 	doJSON(t, "GET", srv.URL+"/api/schedule/"+date, "", http.StatusOK)
 

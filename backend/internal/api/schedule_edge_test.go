@@ -34,16 +34,24 @@ func TestPeriodicAutoStatusUpdater(t *testing.T) {
 	// A block that ended a minute ago, started two minutes ago.
 	pastStart := now.Add(-2 * time.Minute).Format("15:04")
 	pastEnd := now.Add(-1 * time.Minute).Format("15:04")
-	if _, err := repo.CreateBlock(t.Context(), tmpl.ID, models.CreateBlockReq{
+	past, err := repo.CreateBlock(t.Context(), models.CreateBlockReq{
 		Name: "past", Mode: "start_end", StartTime: pastStart, EndTime: &pastEnd,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
 	// A block running now (started 2 minutes ago, ends in 60).
 	activeStart := now.Add(-2 * time.Minute).Format("15:04")
-	if _, err := repo.CreateBlock(t.Context(), tmpl.ID, models.CreateBlockReq{
+	active, err := repo.CreateBlock(t.Context(), models.CreateBlockReq{
 		Name: "active", Mode: "start_duration", StartTime: activeStart, DurationMin: new(60),
-	}); err != nil {
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.AddTemplateBlock(t.Context(), tmpl.ID, past.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.AddTemplateBlock(t.Context(), tmpl.ID, active.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -86,12 +94,8 @@ func TestPeriodicAutoStatusUpdater(t *testing.T) {
 
 func TestRemainingBlockAndSubtaskHandlers(t *testing.T) {
 	srv := newTestServer(t)
-	tmpl := doJSON(t, "POST", srv.URL+"/api/templates",
-		`{"name":"T","icon":"star","repeatDays":[1]}`, http.StatusCreated)
-	tid := tmpl["id"].(string)
-	block := doJSON(t, "POST", srv.URL+"/api/templates/"+tid+"/blocks",
-		`{"name":"A","mode":"start_end","startTime":"07:00","endTime":"07:30"}`, http.StatusCreated)
-	bid := block["id"].(string)
+	bid := newBlock(t, srv, `{"name":"A","mode":"start_end","startTime":"07:00","endTime":"07:30"}`)
+	tid := newTemplate(t, srv, "T", "[1]", bid)
 
 	// Subtask CRUD.
 	sub := doJSON(t, "POST", srv.URL+"/api/blocks/"+bid+"/subtasks", `{"name":"s1"}`, http.StatusCreated)
@@ -124,25 +128,21 @@ func TestRemainingBlockAndSubtaskHandlers(t *testing.T) {
 	del = doRaw(t, "DELETE", srv.URL+"/api/blocks/"+bid, "", http.StatusNoContent)
 	del.Body.Close()
 
-	// Block gone; subtask rows cascaded.
+	// Block gone; junction row cascaded.
 	got := doJSON(t, "GET", srv.URL+"/api/templates/"+tid, "", http.StatusOK)
 	if len(got["blocks"].([]interface{})) != 0 {
 		t.Fatalf("block not deleted: %v", got)
 	}
 }
 
-func TestReorderBlocksHandler(t *testing.T) {
+func TestReorderTemplateBlocksHandler(t *testing.T) {
 	srv := newTestServer(t)
-	tmpl := doJSON(t, "POST", srv.URL+"/api/templates",
-		`{"name":"T","icon":"star","repeatDays":[1]}`, http.StatusCreated)
-	tid := tmpl["id"].(string)
-	b1 := doJSON(t, "POST", srv.URL+"/api/templates/"+tid+"/blocks",
-		`{"name":"A","mode":"start_end","startTime":"07:00","endTime":"07:30"}`, http.StatusCreated)
-	b2 := doJSON(t, "POST", srv.URL+"/api/templates/"+tid+"/blocks",
-		`{"name":"B","mode":"start_end","startTime":"08:00","endTime":"08:30"}`, http.StatusCreated)
+	b1 := newBlock(t, srv, `{"name":"A","mode":"start_end","startTime":"07:00","endTime":"07:30"}`)
+	b2 := newBlock(t, srv, `{"name":"B","mode":"start_end","startTime":"08:00","endTime":"08:30"}`)
+	tid := newTemplate(t, srv, "T", "[1]", b1, b2)
 
-	req, _ := http.NewRequest("PUT", srv.URL+"/api/blocks/"+b1["id"].(string)+"/order",
-		strings.NewReader(fmt.Sprintf(`{"ids":["%s","%s"]}`, b2["id"].(string), b1["id"].(string))))
+	req, _ := http.NewRequest("PUT", srv.URL+"/api/templates/"+tid+"/blocks/order",
+		strings.NewReader(fmt.Sprintf(`{"ids":["%s","%s"]}`, b2, b1)))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -155,7 +155,7 @@ func TestReorderBlocksHandler(t *testing.T) {
 
 	got := doJSON(t, "GET", srv.URL+"/api/templates/"+tid, "", http.StatusOK)
 	blocks := got["blocks"].([]interface{})
-	if blocks[0].(map[string]interface{})["id"] != b2["id"].(string) {
+	if blocks[0].(map[string]interface{})["id"] != b2 {
 		t.Fatalf("block order not applied: %v", blocks)
 	}
 }
@@ -181,8 +181,9 @@ func TestInvalidBodiesRejected(t *testing.T) {
 	}{
 		{"POST", "/api/templates", `{broken`},
 		{"PUT", "/api/templates/x", `{broken`},
-		{"POST", "/api/templates/x/blocks", `{broken`},
+		{"POST", "/api/blocks", `{broken`},
 		{"PUT", "/api/blocks/x", `{broken`},
+		{"PUT", "/api/templates/x/blocks", `{broken`},
 		{"PUT", "/api/schedule/2026-08-03/template", `{broken`},
 		{"POST", "/api/schedule/2026-08-03/blocks", `{broken`},
 		{"PATCH", "/api/schedule/2026-08-03/blocks/x", `{broken`},

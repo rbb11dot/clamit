@@ -41,6 +41,21 @@ func friday(t *testing.T) int {
 	return int(d.Weekday())
 }
 
+// newTemplateWithBlocks creates a template and attaches the given blocks to it.
+func newTemplateWithBlocks(t *testing.T, r *ScheduleRepo, name string, days []int, blockIDs ...string) *models.DayTemplate {
+	t.Helper()
+	tmpl, err := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: name, Icon: "star", RepeatDays: days})
+	if err != nil {
+		t.Fatalf("create template: %v", err)
+	}
+	for _, bid := range blockIDs {
+		if err := r.AddTemplateBlock(context.Background(), tmpl.ID, bid); err != nil {
+			t.Fatalf("add block %s to template: %v", bid, err)
+		}
+	}
+	return tmpl
+}
+
 func TestCreateAndGetTemplate(t *testing.T) {
 	r := newTestRepo(t)
 
@@ -108,9 +123,8 @@ func TestUpdateTemplate(t *testing.T) {
 
 func TestCreateBlockWithSubtasks(t *testing.T) {
 	r := newTestRepo(t)
-	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T", Icon: "star", RepeatDays: []int{1}})
 
-	block, err := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+	block, err := r.CreateBlock(context.Background(), models.CreateBlockReq{
 		Name: "Sabah rutini", Icon: "coffee", Mode: "start_end",
 		StartTime: "07:00", EndTime: new("07:30"),
 		Subtasks: []models.SubtaskReq{{Name: "Kahve"}, {Name: "Yatak"}},
@@ -128,8 +142,8 @@ func TestCreateBlockWithSubtasks(t *testing.T) {
 		t.Fatalf("subtask orders wrong: %+v", block.Subtasks)
 	}
 
-	// Second block gets the next order.
-	block2, err := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+	// Second library block gets the next library order.
+	block2, err := r.CreateBlock(context.Background(), models.CreateBlockReq{
 		Name: "Calisma", Mode: "start_duration", StartTime: "08:00", DurationMin: new(60),
 	})
 	if err != nil {
@@ -140,10 +154,73 @@ func TestCreateBlockWithSubtasks(t *testing.T) {
 	}
 }
 
+func TestTemplateBlockJunction(t *testing.T) {
+	r := newTestRepo(t)
+	b1, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{Name: "A", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30")})
+	b2, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{Name: "B", Mode: "start_end", StartTime: "08:00", EndTime: new("08:30")})
+	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T", Icon: "star", RepeatDays: []int{1}})
+
+	// Attach both blocks; a block can belong to multiple templates.
+	if err := r.AddTemplateBlock(context.Background(), tmpl.ID, b1.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.AddTemplateBlock(context.Background(), tmpl.ID, b2.ID); err != nil {
+		t.Fatal(err)
+	}
+	// Idempotent re-add.
+	if err := r.AddTemplateBlock(context.Background(), tmpl.ID, b1.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	blocks, err := r.ListTemplateBlocks(context.Background(), tmpl.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(blocks) != 2 || blocks[0].ID != b1.ID || blocks[1].ID != b2.ID {
+		t.Fatalf("template blocks wrong: %+v", blocks)
+	}
+
+	// A second template shares b1 (many-to-many).
+	tmpl2, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T2", Icon: "star", RepeatDays: []int{2}})
+	if err := r.AddTemplateBlock(context.Background(), tmpl2.ID, b1.ID); err != nil {
+		t.Fatal(err)
+	}
+	blocks2, _ := r.ListTemplateBlocks(context.Background(), tmpl2.ID)
+	if len(blocks2) != 1 || blocks2[0].ID != b1.ID {
+		t.Fatalf("shared block missing: %+v", blocks2)
+	}
+	// Template 1 unaffected.
+	blocks, _ = r.ListTemplateBlocks(context.Background(), tmpl.ID)
+	if len(blocks) != 2 {
+		t.Fatalf("template 1 mutated: %+v", blocks)
+	}
+
+	// Library lists every non-day block.
+	lib, err := r.ListLibraryBlocks(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lib) != 2 {
+		t.Fatalf("library should have 2 blocks, got %+v", lib)
+	}
+
+	// Detach b2 from tmpl: b2 stays in the library.
+	if err := r.RemoveTemplateBlock(context.Background(), tmpl.ID, b2.ID); err != nil {
+		t.Fatal(err)
+	}
+	blocks, _ = r.ListTemplateBlocks(context.Background(), tmpl.ID)
+	if len(blocks) != 1 || blocks[0].ID != b1.ID {
+		t.Fatalf("after remove: %+v", blocks)
+	}
+	lib, _ = r.ListLibraryBlocks(context.Background())
+	if len(lib) != 2 {
+		t.Fatalf("library block removed: %+v", lib)
+	}
+}
+
 func TestSaveBlockFieldsAndModeSwitch(t *testing.T) {
 	r := newTestRepo(t)
-	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T", Icon: "star", RepeatDays: []int{1}})
-	block, _ := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+	block, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{
 		Name: "A", Icon: "coffee", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30"),
 	})
 
@@ -182,8 +259,7 @@ func TestSaveBlockFieldsAndModeSwitch(t *testing.T) {
 
 func TestSaveBlockSubtaskSync(t *testing.T) {
 	r := newTestRepo(t)
-	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T", Icon: "star", RepeatDays: []int{1}})
-	block, _ := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+	block, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{
 		Name: "A", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30"),
 		Subtasks: []models.SubtaskReq{{Name: "S1"}, {Name: "S2"}, {Name: "S3"}},
 	})
@@ -220,16 +296,16 @@ func TestSaveBlockSubtaskSync(t *testing.T) {
 	}
 }
 
-func TestReorderBlocksAndSubtasks(t *testing.T) {
+func TestReorderTemplateBlocksAndSubtasks(t *testing.T) {
 	r := newTestRepo(t)
-	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T", Icon: "star", RepeatDays: []int{1}})
-	b1, _ := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{Name: "A", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30")})
-	b2, _ := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{Name: "B", Mode: "start_end", StartTime: "08:00", EndTime: new("08:30")})
+	b1, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{Name: "A", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30")})
+	b2, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{Name: "B", Mode: "start_end", StartTime: "08:00", EndTime: new("08:30")})
+	tmpl := newTemplateWithBlocks(t, r, "T", []int{1}, b1.ID, b2.ID)
 
-	if err := r.ReorderBlocks(context.Background(), []string{b2.ID, b1.ID}); err != nil {
+	if err := r.ReorderTemplateBlocks(context.Background(), tmpl.ID, []string{b2.ID, b1.ID}); err != nil {
 		t.Fatalf("reorder blocks: %v", err)
 	}
-	blocks, _ := r.ListBlocks(context.Background(), tmpl.ID)
+	blocks, _ := r.ListTemplateBlocks(context.Background(), tmpl.ID)
 	if blocks[0].ID != b2.ID || blocks[1].ID != b1.ID {
 		t.Fatalf("block order wrong: %v, %v", blocks[0].ID, blocks[1].ID)
 	}
@@ -248,13 +324,11 @@ func TestReorderBlocksAndSubtasks(t *testing.T) {
 func TestGetOrCreateEntryMatchesWeekday(t *testing.T) {
 	r := newTestRepo(t)
 	fri := friday(t)
-	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{
-		Name: "Haftaici", Icon: "briefcase", RepeatDays: []int{fri},
-	})
-	block, _ := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+	block, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{
 		Name: "A", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30"),
 		Subtasks: []models.SubtaskReq{{Name: "s1"}},
 	})
+	tmpl := newTemplateWithBlocks(t, r, "Haftaici", []int{fri}, block.ID)
 
 	entry, err := r.GetOrCreateEntry(context.Background(), "2026-07-31") // Friday
 	if err != nil {
@@ -297,15 +371,15 @@ func TestGetOrCreateEntryNoTemplateIsSpecial(t *testing.T) {
 func TestCopyOnWriteDetachPreservesState(t *testing.T) {
 	r := newTestRepo(t)
 	fri := friday(t)
-	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T", Icon: "star", RepeatDays: []int{fri}})
-	block, _ := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+	block, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{
 		Name: "A", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30"),
 		Subtasks: []models.SubtaskReq{{Name: "s1"}},
 	})
+	tmpl := newTemplateWithBlocks(t, r, "T", []int{fri}, block.ID)
 
 	date := "2026-07-31"
 	if _, err := r.GetOrCreateEntry(context.Background(), date); err != nil {
-		t.Fatalf("entry: %v", err)
+		t.Fatal(err)
 	}
 
 	// Mark the day: manual completed + one toggled subtask.
@@ -340,7 +414,7 @@ func TestCopyOnWriteDetachPreservesState(t *testing.T) {
 	}
 
 	// The template is untouched.
-	tmplBlocks, _ := r.ListBlocks(context.Background(), tmpl.ID)
+	tmplBlocks, _ := r.ListTemplateBlocks(context.Background(), tmpl.ID)
 	if len(tmplBlocks) != 1 || tmplBlocks[0].ID != block.ID {
 		t.Fatalf("template mutated by detach: %+v", tmplBlocks)
 	}
@@ -349,10 +423,10 @@ func TestCopyOnWriteDetachPreservesState(t *testing.T) {
 func TestDeleteTemplateDetachesEntries(t *testing.T) {
 	r := newTestRepo(t)
 	fri := friday(t)
-	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T", Icon: "star", RepeatDays: []int{fri}})
-	block, _ := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+	block, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{
 		Name: "A", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30"),
 	})
+	tmpl := newTemplateWithBlocks(t, r, "T", []int{fri}, block.ID)
 
 	date := "2026-07-31"
 	if _, err := r.GetOrCreateEntry(context.Background(), date); err != nil {
@@ -380,19 +454,23 @@ func TestDeleteTemplateDetachesEntries(t *testing.T) {
 	if got, _ := r.GetTemplate(context.Background(), tmpl.ID); got != nil {
 		t.Fatal("template still exists")
 	}
+	// The library block survives the template deletion.
+	if lib, _ := r.ListLibraryBlocks(context.Background()); len(lib) != 1 {
+		t.Fatalf("library block lost: %+v", lib)
+	}
 }
 
 func TestAddAndRemoveSpecialBlock(t *testing.T) {
 	r := newTestRepo(t)
 	fri := friday(t)
-	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T", Icon: "star", RepeatDays: []int{fri}})
-	_, _ = r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{Name: "Lib", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30")})
-	extra, _ := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{Name: "Extra", Mode: "start_end", StartTime: "09:00", EndTime: new("09:30")})
+	lib, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{Name: "Lib", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30")})
+	extra, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{Name: "Extra", Mode: "start_end", StartTime: "09:00", EndTime: new("09:30")})
+	tmpl := newTemplateWithBlocks(t, r, "T", []int{fri}, lib.ID)
 
 	date := "2026-07-31"
 	entry, _ := r.GetOrCreateEntry(context.Background(), date)
-	if len(entry.Blocks) != 2 {
-		t.Fatalf("expected 2 template blocks, got %d", len(entry.Blocks))
+	if len(entry.Blocks) != 1 {
+		t.Fatalf("expected 1 template block, got %d", len(entry.Blocks))
 	}
 
 	// Adding a block detaches the day (copy-on-write) and adds a day-owned copy.
@@ -403,8 +481,8 @@ func TestAddAndRemoveSpecialBlock(t *testing.T) {
 	if !entry.IsSpecial {
 		t.Fatal("day should be special after add")
 	}
-	if len(entry.Blocks) != 3 {
-		t.Fatalf("expected 3 blocks, got %+v", entry.Blocks)
+	if len(entry.Blocks) != 2 {
+		t.Fatalf("expected 2 blocks, got %+v", entry.Blocks)
 	}
 	var extraBlock *models.BlockState
 	for i := range entry.Blocks {
@@ -416,10 +494,10 @@ func TestAddAndRemoveSpecialBlock(t *testing.T) {
 		t.Fatalf("extra block should have a day-owned copy: %+v", entry.Blocks)
 	}
 
-	// Template untouched: still has 2 library blocks.
-	libBlocks, _ := r.ListBlocks(context.Background(), tmpl.ID)
-	if len(libBlocks) != 2 {
-		t.Fatalf("template mutated: %d blocks", len(libBlocks))
+	// Template untouched: still has 1 block.
+	tmplBlocks, _ := r.ListTemplateBlocks(context.Background(), tmpl.ID)
+	if len(tmplBlocks) != 1 {
+		t.Fatalf("template mutated: %d blocks", len(tmplBlocks))
 	}
 
 	// Remove the added block from the day.
@@ -427,7 +505,7 @@ func TestAddAndRemoveSpecialBlock(t *testing.T) {
 		t.Fatalf("remove special block: %v", err)
 	}
 	entry, _ = r.GetEntry(context.Background(), date)
-	if len(entry.Blocks) != 2 {
+	if len(entry.Blocks) != 1 {
 		t.Fatalf("after remove: %+v", entry.Blocks)
 	}
 	for _, b := range entry.Blocks {
@@ -439,11 +517,11 @@ func TestAddAndRemoveSpecialBlock(t *testing.T) {
 
 func TestToggleSubtaskAndManualStatus(t *testing.T) {
 	r := newTestRepo(t)
-	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T", Icon: "star", RepeatDays: []int{0}})
-	block, _ := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+	block, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{
 		Name: "A", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30"),
 		Subtasks: []models.SubtaskReq{{Name: "s1"}},
 	})
+	_ = newTemplateWithBlocks(t, r, "T", []int{0}, block.ID)
 	date := "2026-08-02" // Sunday
 	if _, err := r.GetOrCreateEntry(context.Background(), date); err != nil {
 		t.Fatal(err)
@@ -487,23 +565,23 @@ func windowWithinToday(t *testing.T, start, end time.Time) {
 
 func TestRecomputeAutoStatusTransitions(t *testing.T) {
 	r := newTestRepo(t)
-	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T", Icon: "star", RepeatDays: []int{0}})
 	now := time.Now()
 	nowStr := now.Format("15:04")
 
-	completed, _ := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+	completed, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{
 		Name: "past", Mode: "start_end",
 		StartTime: now.Add(-2 * time.Minute).Format("15:04"),
 		EndTime:   new(now.Add(-1 * time.Minute).Format("15:04")),
 	})
-	inProgress, _ := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+	inProgress, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{
 		Name: "now", Mode: "start_duration", StartTime: nowStr, DurationMin: new(60),
 	})
-	pending, _ := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+	pending, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{
 		Name: "future", Mode: "start_end",
 		StartTime: now.Add(2 * time.Minute).Format("15:04"),
 		EndTime:   new(now.Add(3 * time.Minute).Format("15:04")),
 	})
+	_ = newTemplateWithBlocks(t, r, "T", []int{0}, completed.ID, inProgress.ID, pending.ID)
 	date := "2026-08-02"
 	if _, err := r.GetOrCreateEntry(context.Background(), date); err != nil {
 		t.Fatal(err)
@@ -532,11 +610,11 @@ func TestRecomputeAutoStatusTransitions(t *testing.T) {
 
 func TestSaveEntryBlockOnSpecialDay(t *testing.T) {
 	r := newTestRepo(t)
-	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T", Icon: "star", RepeatDays: []int{0}})
-	block, _ := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+	block, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{
 		Name: "A", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30"),
 		Subtasks: []models.SubtaskReq{{Name: "s1"}, {Name: "s2"}},
 	})
+	newTemplateWithBlocks(t, r, "T", []int{0}, block.ID)
 	date := "2026-08-02"
 	entry, _ := r.GetOrCreateEntry(context.Background(), date)
 	dayBlockID := entry.Blocks[0].TimeBlockID
@@ -581,11 +659,11 @@ func TestSaveEntryBlockOnSpecialDay(t *testing.T) {
 func TestSaveEntryBlockOnTemplateDayDetaches(t *testing.T) {
 	r := newTestRepo(t)
 	fri := friday(t)
-	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T", Icon: "star", RepeatDays: []int{fri}})
-	block, _ := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+	block, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{
 		Name: "A", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30"),
 		Subtasks: []models.SubtaskReq{{Name: "s1"}},
 	})
+	newTemplateWithBlocks(t, r, "T", []int{fri}, block.ID)
 	date := "2026-07-31"
 	entry, _ := r.GetOrCreateEntry(context.Background(), date)
 	if entry.TemplateID == nil {
@@ -622,12 +700,10 @@ func TestSaveEntryBlockOnTemplateDayDetaches(t *testing.T) {
 func TestSetEntryTemplateAttach(t *testing.T) {
 	r := newTestRepo(t)
 	fri := friday(t)
-	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T", Icon: "star", RepeatDays: []int{fri}})
-	if _, err := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+	block, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{
 		Name: "A", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30"),
-	}); err != nil {
-		t.Fatal(err)
-	}
+	})
+	tmpl := newTemplateWithBlocks(t, r, "T", []int{fri}, block.ID)
 
 	date := "2026-08-02" // Sunday — no template match, special day
 	if _, err := r.GetOrCreateEntry(context.Background(), date); err != nil {
@@ -646,12 +722,10 @@ func TestSetEntryTemplateAttach(t *testing.T) {
 	}
 
 	// Re-attach to a different template: states are rebuilt from the new template.
-	tmpl2, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T2", Icon: "star", RepeatDays: []int{0}})
-	if _, err := r.CreateBlock(context.Background(), tmpl2.ID, models.CreateBlockReq{
+	block2, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{
 		Name: "B", Mode: "start_end", StartTime: "10:00", EndTime: new("10:30"),
-	}); err != nil {
-		t.Fatal(err)
-	}
+	})
+	tmpl2 := newTemplateWithBlocks(t, r, "T2", []int{0}, block2.ID)
 	replaced, err := r.SetEntryTemplate(context.Background(), date, &tmpl2.ID)
 	if err != nil {
 		t.Fatalf("replace: %v", err)
@@ -661,29 +735,67 @@ func TestSetEntryTemplateAttach(t *testing.T) {
 	}
 }
 
-func TestDeleteBlockCascadesSubtasks(t *testing.T) {
+func TestTemplatesIncludeBlocksAndSubtasks(t *testing.T) {
 	r := newTestRepo(t)
-	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T", Icon: "star", RepeatDays: []int{1}})
-	block, _ := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+	b1, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{
 		Name: "A", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30"),
 		Subtasks: []models.SubtaskReq{{Name: "s1"}},
 	})
-	if err := r.DeleteBlock(context.Background(), block.ID); err != nil {
+	b2, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{
+		Name: "B", Mode: "start_duration", StartTime: "08:00", DurationMin: new(30),
+	})
+	tmpl := newTemplateWithBlocks(t, r, "T", []int{1}, b1.ID, b2.ID)
+
+	// The library UI renders blocks and their subtasks straight from template
+	// lists — both must be populated.
+	list, err := r.ListTemplates(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || len(list[0].Blocks) != 2 {
+		t.Fatalf("templates missing blocks: %+v", list)
+	}
+	if list[0].Blocks[0].Name != "A" || len(list[0].Blocks[0].Subtasks) != 1 {
+		t.Fatalf("blocks missing subtasks: %+v", list[0].Blocks)
+	}
+
+	got, err := r.GetTemplate(context.Background(), tmpl.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Blocks) != 2 || got.Blocks[1].Name != "B" {
+		t.Fatalf("get template missing blocks: %+v", got.Blocks)
+	}
+}
+
+func TestDeleteBlockCascadesJunction(t *testing.T) {
+	r := newTestRepo(t)
+	b1, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{
+		Name: "A", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30"),
+		Subtasks: []models.SubtaskReq{{Name: "s1"}},
+	})
+	tmpl := newTemplateWithBlocks(t, r, "T", []int{1}, b1.ID)
+
+	if err := r.DeleteBlock(context.Background(), b1.ID); err != nil {
 		t.Fatalf("delete block: %v", err)
 	}
-	subs, _ := r.ListSubtasks(context.Background(), block.ID)
+	subs, _ := r.ListSubtasks(context.Background(), b1.ID)
 	if len(subs) != 0 {
 		t.Fatalf("subtasks not cascaded: %v", subs)
 	}
-	if got, _ := r.GetBlock(context.Background(), block.ID); got != nil {
+	if got, _ := r.GetBlock(context.Background(), b1.ID); got != nil {
 		t.Fatal("block still present")
+	}
+	// Junction row cascaded: the template now has no blocks.
+	tmplBlocks, _ := r.ListTemplateBlocks(context.Background(), tmpl.ID)
+	if len(tmplBlocks) != 0 {
+		t.Fatalf("junction row survived delete: %+v", tmplBlocks)
 	}
 }
 
 func TestUpdateAndDeleteSubtask(t *testing.T) {
 	r := newTestRepo(t)
-	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T", Icon: "star", RepeatDays: []int{1}})
-	block, _ := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+	block, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{
 		Name: "A", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30"),
 	})
 	sub, _ := r.CreateSubtask(context.Background(), block.ID, models.SubtaskReq{Name: "s1"})
@@ -706,10 +818,10 @@ func TestUpdateAndDeleteSubtask(t *testing.T) {
 
 func TestUpdateAutoStatus(t *testing.T) {
 	r := newTestRepo(t)
-	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T", Icon: "star", RepeatDays: []int{0}})
-	block, _ := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+	block, _ := r.CreateBlock(context.Background(), models.CreateBlockReq{
 		Name: "A", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30"),
 	})
+	_ = newTemplateWithBlocks(t, r, "T", []int{0}, block.ID)
 	date := "2026-08-02"
 	if _, err := r.GetOrCreateEntry(context.Background(), date); err != nil {
 		t.Fatal(err)
@@ -724,9 +836,9 @@ func TestUpdateAutoStatus(t *testing.T) {
 	}
 }
 
-// TestOpenMigratesLegacySchema simulates a database created before day-owned
-// blocks existed (time_blocks without entry_id) and verifies db.Open rebuilds
-// the table, preserving existing rows.
+// TestOpenMigratesLegacySchema simulates a database created before the library
+// model existed (time_blocks owned by a single template via template_id) and
+// verifies db.Open rebuilds the table, backfills the junction, and keeps rows.
 func TestOpenMigratesLegacySchema(t *testing.T) {
 	legacyPath := filepath.Join(t.TempDir(), "legacy.db")
 	legacy, err := sql.Open("sqlite", legacyPath)
@@ -752,17 +864,22 @@ func TestOpenMigratesLegacySchema(t *testing.T) {
 	}
 	defer database.Close()
 
-	// entry_id column exists and data survived.
-	var hasEntryID bool
-	rows, _ := database.Query(`SELECT COUNT(*) FROM pragma_table_info('time_blocks') WHERE name = 'entry_id'`)
-	if rows.Next() {
-		var n int
-		rows.Scan(&n)
-		hasEntryID = n == 1
+	// template_id column is gone, entry_id exists, data survived.
+	var hasTemplateID, hasEntryID bool
+	rows, _ := database.Query(`SELECT name FROM pragma_table_info('time_blocks')`)
+	for rows.Next() {
+		var name string
+		rows.Scan(&name)
+		if name == "template_id" {
+			hasTemplateID = true
+		}
+		if name == "entry_id" {
+			hasEntryID = true
+		}
 	}
 	rows.Close()
-	if !hasEntryID {
-		t.Fatal("time_blocks not rebuilt with entry_id")
+	if hasTemplateID || !hasEntryID {
+		t.Fatalf("time_blocks not rebuilt: template_id=%v entry_id=%v", hasTemplateID, hasEntryID)
 	}
 	var name string
 	if err := database.QueryRow(`SELECT name FROM time_blocks WHERE id = 'blk1'`).Scan(&name); err != nil {
@@ -770,6 +887,13 @@ func TestOpenMigratesLegacySchema(t *testing.T) {
 	}
 	if name != "A" {
 		t.Fatalf("row corrupted: %q", name)
+	}
+
+	// The legacy template/block association was backfilled into the junction.
+	var junctionCount int
+	database.QueryRow(`SELECT COUNT(*) FROM template_blocks WHERE template_id='tmpl1' AND block_id='blk1'`).Scan(&junctionCount)
+	if junctionCount != 1 {
+		t.Fatalf("junction not backfilled: %d rows", junctionCount)
 	}
 
 	// Day-owned blocks now work: attach a block to an entry.
@@ -784,42 +908,5 @@ func TestOpenMigratesLegacySchema(t *testing.T) {
 	entry, _ = repo.GetEntry(context.Background(), "2026-08-02")
 	if len(entry.Blocks) != 1 {
 		t.Fatalf("day-owned block not visible: %+v", entry.Blocks)
-	}
-}
-
-func TestTemplatesIncludeBlocksAndSubtasks(t *testing.T) {
-	r := newTestRepo(t)
-	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T", Icon: "star", RepeatDays: []int{1}})
-	if _, err := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
-		Name: "A", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30"),
-		Subtasks: []models.SubtaskReq{{Name: "s1"}},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
-		Name: "B", Mode: "start_duration", StartTime: "08:00", DurationMin: new(30),
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	// The library UI renders blocks and their subtasks straight from template
-	// lists — both must be populated.
-	list, err := r.ListTemplates(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(list) != 1 || len(list[0].Blocks) != 2 {
-		t.Fatalf("templates missing blocks: %+v", list)
-	}
-	if list[0].Blocks[0].Name != "A" || len(list[0].Blocks[0].Subtasks) != 1 {
-		t.Fatalf("blocks missing subtasks: %+v", list[0].Blocks)
-	}
-
-	got, err := r.GetTemplate(context.Background(), tmpl.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got.Blocks) != 2 || got.Blocks[1].Name != "B" {
-		t.Fatalf("get template missing blocks: %+v", got.Blocks)
 	}
 }
