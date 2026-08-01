@@ -12,10 +12,17 @@ class ScheduleRepository(private val api: ScheduleApi) {
     suspend fun updateTemplate(id: String, req: UpdateTemplateRequest) = api.updateTemplate(id, req)
     suspend fun deleteTemplate(id: String) = api.deleteTemplate(id)
 
-    // Blocks
-    suspend fun createBlock(templateId: String, req: CreateBlockRequest) = api.createBlock(templateId, req)
+    // Blocks — the library
+    suspend fun createBlock(req: CreateBlockRequest) = api.createBlock(req)
+    suspend fun listBlocks() = api.listBlocks()
     suspend fun updateBlock(id: String, req: UpdateBlockRequest) = api.updateBlock(id, req)
     suspend fun deleteBlock(id: String) = api.deleteBlock(id)
+
+    // Template ↔ block associations
+    suspend fun addTemplateBlock(templateId: String, blockId: String) =
+        api.addTemplateBlock(templateId, AddBlockRequest(blockId))
+    suspend fun removeTemplateBlock(templateId: String, blockId: String) =
+        api.removeTemplateBlock(templateId, blockId)
 
     // Subtasks
     suspend fun createSubtask(blockId: String, req: SubtaskRequest) = api.createSubtask(blockId, req)

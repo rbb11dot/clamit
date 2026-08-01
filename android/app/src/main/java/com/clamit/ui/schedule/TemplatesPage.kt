@@ -291,6 +291,15 @@ fun TemplateEditorPage(
             templateToEdit?.repeatDays?.let { addAll(it) }
         }
     }
+    var showBlockPicker by remember { mutableStateOf(false) }
+
+    // The template's current blocks, refreshed from uiState after each attach.
+    val currentBlocks = remember(templateToEdit, uiState.templates) {
+        uiState.templates.find { it.id == templateToEdit?.id }?.blocks ?: templateToEdit?.blocks ?: emptyList()
+    }
+    val availableBlocks = remember(currentBlocks, uiState.libraryBlocks) {
+        uiState.libraryBlocks.filter { lib -> currentBlocks.none { it.id == lib.id } }
+    }
 
     val dayNames = listOf("Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi")
 
@@ -384,7 +393,76 @@ fun TemplateEditorPage(
                 }
             }
 
-            // Save Action
+			// Block management (edit mode only — a new template has no id yet).
+			if (templateToEdit != null) {
+				item {
+					Text(
+						"Zaman Blokları",
+						style = MaterialTheme.typography.titleSmall,
+						fontWeight = FontWeight.Bold
+					)
+					Spacer(Modifier.height(8.dp))
+					Card(
+						shape = RoundedCornerShape(16.dp),
+						colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+					) {
+						Column(modifier = Modifier.padding(12.dp)) {
+							if (currentBlocks.isEmpty()) {
+								Text(
+									"Bu şablonda henüz blok yok.",
+									style = MaterialTheme.typography.bodySmall,
+									color = MaterialTheme.colorScheme.onSurfaceVariant
+								)
+							} else {
+								currentBlocks.forEach { block ->
+									Row(
+										verticalAlignment = Alignment.CenterVertically,
+										modifier = Modifier
+											.fillMaxWidth()
+											.padding(vertical = 2.dp)
+									) {
+										Icon(
+											ScheduleIcons.getIconOrDefault(block.icon),
+											contentDescription = null,
+											tint = MaterialTheme.colorScheme.primary,
+											modifier = Modifier.size(20.dp)
+										)
+										Spacer(Modifier.width(10.dp))
+										Text(
+											block.name,
+											style = MaterialTheme.typography.bodyMedium,
+											modifier = Modifier.weight(1f)
+										)
+										IconButton(
+											onClick = { viewModel.removeTemplateBlock(templateToEdit.id, block.id) },
+											modifier = Modifier.size(32.dp)
+										) {
+											Icon(
+												Icons.Default.Close,
+												contentDescription = "Şablondan kaldır",
+												tint = MaterialTheme.colorScheme.error,
+												modifier = Modifier.size(18.dp)
+											)
+										}
+									}
+								}
+							}
+							Spacer(Modifier.height(4.dp))
+							OutlinedButton(
+								onClick = { showBlockPicker = true },
+								shape = RoundedCornerShape(12.dp),
+								modifier = Modifier.fillMaxWidth()
+							) {
+								Icon(Icons.Default.Add, contentDescription = null)
+								Spacer(Modifier.width(6.dp))
+								Text("Blok Ekle", fontWeight = FontWeight.SemiBold)
+							}
+						}
+					}
+				}
+			}
+
+			// Save Action
             item {
                 Spacer(Modifier.height(8.dp))
                 Button(
@@ -410,5 +488,45 @@ fun TemplateEditorPage(
                 }
             }
         }
+    }
+
+    if (showBlockPicker && templateToEdit != null) {
+        AlertDialog(
+            onDismissRequest = { showBlockPicker = false },
+            title = { Text("Blok Ekle", fontWeight = FontWeight.Bold) },
+            text = {
+                if (availableBlocks.isEmpty()) {
+                    Text("Kütüphanede eklenebilecek blok yok. Önce Zaman Blokları sayfasından blok oluşturun.")
+                } else {
+                    Column {
+                        availableBlocks.forEach { block ->
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        viewModel.addTemplateBlock(templateToEdit.id, block.id)
+                                        showBlockPicker = false
+                                    }
+                                    .padding(vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    ScheduleIcons.getIconOrDefault(block.icon),
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Text(block.name, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showBlockPicker = false }) { Text("Kapat") }
+            }
+        )
     }
 }

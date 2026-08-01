@@ -21,15 +21,26 @@ interface ScheduleApi {
     @DELETE("api/templates/{id}")
     suspend fun deleteTemplate(@Path("id") id: String)
 
-    // Blocks
-    @POST("api/templates/{tid}/blocks")
-    suspend fun createBlock(@Path("tid") tid: String, @Body req: CreateBlockRequest): TimeBlock
+    // Blocks — the library. Blocks are standalone; templates reference them
+    // through the junction (many-to-many).
+    @POST("api/blocks")
+    suspend fun createBlock(@Body req: CreateBlockRequest): TimeBlock
+
+    @GET("api/blocks")
+    suspend fun listBlocks(): List<TimeBlock>
 
     @PUT("api/blocks/{bid}")
     suspend fun updateBlock(@Path("bid") bid: String, @Body req: UpdateBlockRequest): TimeBlock
 
     @DELETE("api/blocks/{bid}")
     suspend fun deleteBlock(@Path("bid") bid: String)
+
+    // Template ↔ block associations
+    @PUT("api/templates/{tid}/blocks")
+    suspend fun addTemplateBlock(@Path("tid") tid: String, @Body req: AddBlockRequest)
+
+    @DELETE("api/templates/{tid}/blocks/{bid}")
+    suspend fun removeTemplateBlock(@Path("tid") tid: String, @Path("bid") bid: String)
 
     // Subtasks
     @POST("api/blocks/{bid}/subtasks")

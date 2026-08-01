@@ -33,10 +33,12 @@ fun BlocksPage(
     onNewBlock: () -> Unit,
     onEditBlock: (TimeBlock) -> Unit
 ) {
-    // Extract all blocks from templates
-    val allBlocksWithTemplates = remember(uiState.templates) {
-        uiState.templates.flatMap { template ->
-            template.blocks.map { block -> template to block }
+    // Library blocks, each annotated with the templates it belongs to (a block
+    // can be attached to several templates — many-to-many).
+    val libraryBlocksWithTemplates = remember(uiState.libraryBlocks, uiState.templates) {
+        uiState.libraryBlocks.map { block ->
+            val memberTemplates = uiState.templates.filter { t -> t.blocks.any { it.id == block.id } }
+            block to memberTemplates.map { it.name }
         }
     }
 
@@ -85,7 +87,7 @@ fun BlocksPage(
         ) {
             ErrorBanner(error = uiState.error, onDismiss = viewModel::clearError)
 
-            if (allBlocksWithTemplates.isEmpty()) {
+			if (libraryBlocksWithTemplates.isEmpty()) {
                 // Expressive Empty State
                 Column(
                     modifier = Modifier
@@ -128,10 +130,10 @@ fun BlocksPage(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     contentPadding = PaddingValues(top = 12.dp, bottom = 88.dp)
                 ) {
-                    items(allBlocksWithTemplates, key = { (_, block) -> block.id }) { (template, block) ->
+                    items(libraryBlocksWithTemplates, key = { (block, _) -> block.id }) { (block, templateNames) ->
                         TimeBlockListItem(
                             block = block,
-                            templateName = template.name,
+                            templateNames = templateNames,
                             onEdit = { onEditBlock(block) },
                             onDelete = { blockToDelete = block }
                         )
@@ -145,7 +147,7 @@ fun BlocksPage(
         AlertDialog(
             onDismissRequest = { blockToDelete = null },
             title = { Text("Bloğu sil", fontWeight = FontWeight.Bold) },
-            text = { Text("\"${block.name}\" şablonundan silinecek. Bu işlem geri alınamaz.") },
+			text = { Text("\"${block.name}\" kütüphaneden silinecek ve şablonlardaki tüm bağlantıları kaldırılacak. Bu işlem geri alınamaz.") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -168,7 +170,7 @@ fun BlocksPage(
 @Composable
 private fun TimeBlockListItem(
     block: TimeBlock,
-    templateName: String,
+    templateNames: List<String>,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -230,7 +232,7 @@ private fun TimeBlockListItem(
                     )
                 }
 
-                // Template Name Badge
+                // Template membership badges (a block can belong to several templates)
                 Surface(
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.primaryContainer,
@@ -240,10 +242,11 @@ private fun TimeBlockListItem(
                     )
                 ) {
                     Text(
-                        text = templateName,
+                        text = templateNames.joinToString(", ").ifEmpty { "Şablonsuz" },
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        maxLines = 1,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
@@ -337,15 +340,6 @@ fun BlockEditorPage(
     var saving by remember { mutableStateOf(false) }
     var validationError by remember { mutableStateOf<String?>(null) }
 
-    // Target template when creating a block from the library page.
-    val templateOptions = uiState.templates
-    val defaultTemplateId = remember(blockToEdit) {
-        uiState.entry?.templateId?.takeIf { tid -> templateOptions.any { it.id == tid } }
-            ?: templateOptions.firstOrNull()?.id
-    }
-    var selectedTemplateId by remember(blockToEdit) { mutableStateOf(defaultTemplateId) }
-    var templateMenuOpen by remember { mutableStateOf(false) }
-
     val scope = rememberCoroutineScope()
 
     // Time field validation (Saat 0-23, Dakika 0-59, Süre > 0)
@@ -374,10 +368,6 @@ fun BlockEditorPage(
             validationError = "Geçersiz saat. Saat 0-23, dakika 0-59 arasında olmalı."
             return
         }
-        if (!isEdit && selectedTemplateId == null && templateOptions.isNotEmpty()) {
-            validationError = "Bir şablon seçin."
-            return
-        }
         validationError = null
         saving = true
         scope.launch {
@@ -396,29 +386,15 @@ fun BlockEditorPage(
                     drafts.map { it.serverId to it.text.trim() }
                 )
                 else -> {
-                    // Sequential save: resolve/create the template FIRST, then create the block
-                    // with the real template id — never a fire-and-forget createTemplate followed
-                    // by a synchronous read of the stale template list.
-                    val templateId = selectedTemplateId ?: viewModel.ensureTemplateId()
-                    if (templateId == null) {
-                        false
-                    } else {
-                        val blockId = viewModel.createBlockSuspended(
-                            templateId,
-                            name.trim(),
-                            blockIcon,
-                            mode,
-                            st,
-                            et,
-                            durMin,
-                            drafts.map { it.text.trim() }
-                        )
-                        // Opened from the home page FAB: the new block must land on the current day.
-                        if (blockId != null && addToCurrentDay) {
-                            viewModel.addSpecialBlockToCurrentDaySuspended(blockId)
-                        }
-                        blockId != null
+                    // Create a standalone library block first, then optionally land it
+                    // on the current day (home FAB flow).
+                    val blockId = viewModel.createBlockSuspended(
+                        name.trim(), blockIcon, mode, st, et, durMin, drafts.map { it.text.trim() }
+                    )
+                    if (blockId != null && addToCurrentDay) {
+                        viewModel.addSpecialBlockToCurrentDaySuspended(blockId)
                     }
+                    blockId != null
                 }
             }
 
@@ -474,52 +450,31 @@ fun BlockEditorPage(
                 }
             }
 
-            // Target template (only when creating from the library page).
+            // Library hint: blocks are shared across templates — attach this block to
+            // a template from the template's edit page.
             if (!isEdit && !addToCurrentDay) {
                 item {
-                    Text(
-                        "Şablon",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    if (templateOptions.isEmpty()) {
-                        Text(
-                            "Henüz şablon yok — kaydederken otomatik oluşturulacak.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    } else {
-                        ExposedDropdownMenuBox(
-                            expanded = templateMenuOpen,
-                            onExpandedChange = { templateMenuOpen = it }
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(12.dp)
                         ) {
-                            OutlinedTextField(
-                                value = templateOptions.firstOrNull { it.id == selectedTemplateId }?.name ?: "Şablon seç",
-                                onValueChange = {},
-                                readOnly = true,
-                                singleLine = true,
-                                label = { Text("Şablon seç") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateMenuOpen) },
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                            Icon(
+                                Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                modifier = Modifier.size(18.dp)
                             )
-                            ExposedDropdownMenu(
-                                expanded = templateMenuOpen,
-                                onDismissRequest = { templateMenuOpen = false }
-                            ) {
-                                templateOptions.forEach { t ->
-                                    DropdownMenuItem(
-                                        text = { Text(t.name) },
-                                        onClick = {
-                                            selectedTemplateId = t.id
-                                            templateMenuOpen = false
-                                        }
-                                    )
-                                }
-                            }
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Blok kütüphaneye eklenir. Bir şablona eklemek için şablonu düzenleyip + butonunu kullanın.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
                         }
                     }
                 }

@@ -41,12 +41,9 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
     var showTemplateEditor by remember { mutableStateOf(false) }
     val activity = LocalContext.current as? android.app.Activity
 
-    // Full-screen editors overlay everything: Back must dismiss the editor first,
-    // never exit the app or navigate away underneath it. Registered last so it wins.
-    BackHandler(enabled = blockEditorRequest != null || showTemplateEditor) {
-        blockEditorRequest = null
-        showTemplateEditor = false
-    }
+    // Back navigation. The editor handler is registered LAST because Compose
+    // gives the most recently composed enabled BackHandler precedence — editors
+    // overlay everything, so Back must dismiss them before page navigation.
     BackHandler(enabled = drawerState.isOpen) {
         scope.launch { drawerState.close() }
     }
@@ -55,6 +52,10 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
     }
     BackHandler(enabled = !drawerState.isOpen && currentPage == SchedulePage.HOME) {
         activity?.finish()
+    }
+    BackHandler(enabled = blockEditorRequest != null || showTemplateEditor) {
+        blockEditorRequest = null
+        showTemplateEditor = false
     }
 
     ModalNavigationDrawer(

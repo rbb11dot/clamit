@@ -15,6 +15,7 @@ data class ScheduleUiState(
     val currentDate: LocalDate = LocalDate.now(),
     val entry: ScheduleEntry? = null,
     val templates: List<DayTemplate> = emptyList(),
+    val libraryBlocks: List<TimeBlock> = emptyList(),
     val isLoading: Boolean = false,
     val error: String? = null
 )
@@ -54,10 +55,12 @@ class ScheduleViewModel(
                 if (gen != loadGen) return@launch
                 val entry = repository.getEntry(dateStr)
                 val templates = repository.listTemplates()
+                val libraryBlocks = repository.listBlocks()
                 if (gen != loadGen) return@launch
                 _uiState.value = _uiState.value.copy(
                     entry = entry,
                     templates = templates,
+                    libraryBlocks = libraryBlocks,
                     isLoading = false
                 )
             } catch (e: retrofit2.HttpException) {
@@ -106,58 +109,35 @@ class ScheduleViewModel(
         _uiState.value = _uiState.value.copy(error = null)
     }
 
-    /** Returns the template a new block should belong to: the current day's template,
-     *  else the first template, else a freshly created catch-all template.
-     *  Returns null on failure (error surfaced in uiState). */
-    suspend fun ensureTemplateId(): String? {
-        val st = _uiState.value
-        st.entry?.templateId?.let { tid ->
-            if (st.templates.any { it.id == tid }) return tid
-        }
-        st.templates.firstOrNull()?.let { return it.id }
-        return try {
-            val created = repository.createTemplate(
-                CreateTemplateRequest("Genel Şablon", "calendar_today", (0..6).toList())
-            )
-            load()
-            created.id
-        } catch (e: Exception) {
-            _uiState.value = _uiState.value.copy(
-                error = e.message ?: "Şablon oluşturulamadı"
-            )
-            null
-        }
-    }
-
-    /** Sequential save used by BlockEditorPage: returns the created block id or null. */
-    suspend fun createBlockSuspended(
-        templateId: String,
-        name: String,
-        icon: String,
-        mode: String,
-        startTime: String,
-        endTime: String?,
-        durationMin: Int?,
-        subtaskNames: List<String>
-    ): String? {
-        return try {
-            val req = CreateBlockRequest(
-                name = name,
-                icon = icon,
-                mode = mode,
-                startTime = startTime,
-                endTime = endTime,
-                durationMin = durationMin,
-                subtasks = subtaskNames.map { SubtaskRequest(it) }
-            )
-            repository.createBlock(templateId, req).id
-        } catch (e: Exception) {
-            _uiState.value = _uiState.value.copy(
-                error = e.message ?: "Blok oluşturulamadı"
-            )
-            null
-        }
-    }
+	/** Creates a standalone library block (no template — blocks are shared across
+	 *  templates through the junction). Returns the created block id or null. */
+	suspend fun createBlockSuspended(
+		name: String,
+		icon: String,
+		mode: String,
+		startTime: String,
+		endTime: String?,
+		durationMin: Int?,
+		subtaskNames: List<String>
+	): String? {
+		return try {
+			val req = CreateBlockRequest(
+				name = name,
+				icon = icon,
+				mode = mode,
+				startTime = startTime,
+				endTime = endTime,
+				durationMin = durationMin,
+				subtasks = subtaskNames.map { SubtaskRequest(it) }
+			)
+			repository.createBlock(req).id
+		} catch (e: Exception) {
+			_uiState.value = _uiState.value.copy(
+				error = e.message ?: "Blok oluşturulamadı"
+			)
+			null
+		}
+	}
 
 	/** Adds an existing block to the current day (copy-on-write: a template-linked day
 	 *  detaches and becomes a standalone special day). Returns false on failure. */
@@ -288,21 +268,29 @@ class ScheduleViewModel(
         }
     }
 
-    fun createBlock(templateId: String, name: String, icon: String, mode: String, startTime: String, endTime: String?, durationMin: Int?, subtaskNames: List<String>) {
+    /** Attaches an existing library block to a template (many-to-many). */
+    fun addTemplateBlock(templateId: String, blockId: String) {
         if (mutating) return
         mutating = true
         viewModelScope.launch {
             try {
-                val req = CreateBlockRequest(
-                    name = name,
-                    icon = icon,
-                    mode = mode,
-                    startTime = startTime,
-                    endTime = endTime,
-                    durationMin = durationMin,
-                    subtasks = subtaskNames.map { SubtaskRequest(it) }
-                )
-                repository.createBlock(templateId, req)
+                repository.addTemplateBlock(templateId, blockId)
+                load()
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(error = e.message)
+            } finally {
+                mutating = false
+            }
+        }
+    }
+
+    /** Detaches a block from a template. The block stays in the library. */
+    fun removeTemplateBlock(templateId: String, blockId: String) {
+        if (mutating) return
+        mutating = true
+        viewModelScope.launch {
+            try {
+                repository.removeTemplateBlock(templateId, blockId)
                 load()
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(error = e.message)
