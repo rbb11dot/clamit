@@ -52,11 +52,13 @@ func updateAutoStatuses(db *sql.DB) error {
 		return err
 	}
 
-	// Find blocks that should be completed (past end time)
+	// Find blocks that should be completed (past end time). This must also catch
+	// blocks whose whole window elapsed while the app was closed and were never
+	// observed 'in_progress' — otherwise they'd sit at 'pending' forever.
 	_, err = db.Exec(`
 		UPDATE time_block_states SET auto_status = 'completed'
 		WHERE entry_id IN (SELECT id FROM schedule_entries WHERE date = ?)
-		AND auto_status = 'in_progress'
+		AND auto_status IN ('pending', 'in_progress')
 		AND time_block_id IN (
 			SELECT id FROM time_blocks
 			WHERE (mode = 'start_end' AND end_time <= ?)
