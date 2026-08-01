@@ -65,6 +65,7 @@ func migrate(db *sql.DB) error {
 //   - legacy template_id rows are backfilled into the junction (idempotent)
 //   - time_blocks is rebuilt without template_id, and with entry_id for
 //     day-owned snapshot rows when it is missing
+//
 // Guarded by column inspection rather than a version number (migrations rerun
 // on every start).
 func ensureDayOwnedBlocks(db *sql.DB) error {
