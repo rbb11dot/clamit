@@ -48,7 +48,7 @@ func (r *ScheduleRepo) GetTemplate(ctx context.Context, id string) (*models.DayT
 		return nil, fmt.Errorf("get template: %w", err)
 	}
 	json.Unmarshal([]byte(daysJSON), &t.RepeatDays)
-	blocks, err := r.ListBlocks(ctx, t.ID)
+	blocks, err := r.ListTemplateBlocks(ctx, t.ID)
 	if err != nil {
 		return nil, fmt.Errorf("get template blocks: %w", err)
 	}
@@ -75,7 +75,7 @@ func (r *ScheduleRepo) ListTemplates(ctx context.Context) ([]models.DayTemplate,
 		// The app renders the block library from template lists (Zaman Blokları
 		// page, template cards, template picker), so every template ships with
 		// its blocks and subtasks. Localhost scale makes the N+1 irrelevant.
-		blocks, err := r.ListBlocks(ctx, t.ID)
+		blocks, err := r.ListTemplateBlocks(ctx, t.ID)
 		if err != nil {
 			return nil, fmt.Errorf("list template blocks: %w", err)
 		}
@@ -155,13 +155,15 @@ func (r *ScheduleRepo) DeleteTemplate(ctx context.Context, id string) error {
 
 // ---- Time Blocks ----
 
-func (r *ScheduleRepo) CreateBlock(ctx context.Context, templateID string, req models.CreateBlockReq) (*models.TimeBlock, error) {
+// CreateBlock adds a standalone library block. Blocks are not owned by a
+// template; templates reference them through template_blocks (many-to-many).
+func (r *ScheduleRepo) CreateBlock(ctx context.Context, req models.CreateBlockReq) (*models.TimeBlock, error) {
 	id := uuid.New().String()
 
 	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO time_blocks (id, template_id, name, icon, mode, start_time, end_time, duration_min, block_order)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(block_order), -1) + 1 FROM time_blocks WHERE template_id = ?))`,
-		id, templateID, req.Name, req.Icon, req.Mode, req.StartTime, req.EndTime, req.DurationMin, templateID)
+		`INSERT INTO time_blocks (id, name, icon, mode, start_time, end_time, duration_min, block_order)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(block_order), -1) + 1 FROM time_blocks WHERE entry_id IS NULL))`,
+		id, req.Name, req.Icon, req.Mode, req.StartTime, req.EndTime, req.DurationMin)
 	if err != nil {
 		return nil, fmt.Errorf("create block: %w", err)
 	}
@@ -183,9 +185,9 @@ func (r *ScheduleRepo) CreateBlock(ctx context.Context, templateID string, req m
 func (r *ScheduleRepo) GetBlock(ctx context.Context, id string) (*models.TimeBlock, error) {
 	var b models.TimeBlock
 	err := r.db.QueryRowContext(ctx,
-		`SELECT id, template_id, name, icon, mode, start_time, end_time, duration_min, block_order, created_at
+		`SELECT id, name, icon, mode, start_time, end_time, duration_min, block_order, created_at
 		 FROM time_blocks WHERE id = ?`, id).
-		Scan(&b.ID, &b.TemplateID, &b.Name, &b.Icon, &b.Mode, &b.StartTime, &b.EndTime, &b.DurationMin, &b.BlockOrder, &b.CreatedAt)
+		Scan(&b.ID, &b.Name, &b.Icon, &b.Mode, &b.StartTime, &b.EndTime, &b.DurationMin, &b.BlockOrder, &b.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -201,29 +203,50 @@ func (r *ScheduleRepo) GetBlock(ctx context.Context, id string) (*models.TimeBlo
 	return &b, nil
 }
 
-func (r *ScheduleRepo) ListBlocks(ctx context.Context, templateID string) ([]models.TimeBlock, error) {
+// ListTemplateBlocks returns the blocks attached to a template, in junction order.
+func (r *ScheduleRepo) ListTemplateBlocks(ctx context.Context, templateID string) ([]models.TimeBlock, error) {
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, template_id, name, icon, mode, start_time, end_time, duration_min, block_order, created_at
-		 FROM time_blocks WHERE template_id = ? ORDER BY block_order`, templateID)
+		`SELECT b.id, b.name, b.icon, b.mode, b.start_time, b.end_time, b.duration_min, tb.block_order, b.created_at
+		 FROM template_blocks tb
+		 JOIN time_blocks b ON b.id = tb.block_id
+		 WHERE tb.template_id = ?
+		 ORDER BY tb.block_order`, templateID)
 	if err != nil {
-		return nil, fmt.Errorf("list blocks: %w", err)
+		return nil, fmt.Errorf("list template blocks: %w", err)
 	}
 	defer rows.Close()
+	return r.scanBlocks(ctx, rows)
+}
 
+// ListLibraryBlocks returns every non-day-owned block (the block library).
+func (r *ScheduleRepo) ListLibraryBlocks(ctx context.Context) ([]models.TimeBlock, error) {
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, name, icon, mode, start_time, end_time, duration_min, block_order, created_at
+		 FROM time_blocks WHERE entry_id IS NULL ORDER BY block_order, created_at`)
+	if err != nil {
+		return nil, fmt.Errorf("list library blocks: %w", err)
+	}
+	defer rows.Close()
+	return r.scanBlocks(ctx, rows)
+}
+
+// scanBlocks scans block rows (including their subtasks) from an open cursor.
+func (r *ScheduleRepo) scanBlocks(ctx context.Context, rows *sql.Rows) ([]models.TimeBlock, error) {
 	blocks := make([]models.TimeBlock, 0)
 	for rows.Next() {
 		var b models.TimeBlock
-		if err := rows.Scan(&b.ID, &b.TemplateID, &b.Name, &b.Icon, &b.Mode, &b.StartTime, &b.EndTime, &b.DurationMin, &b.BlockOrder, &b.CreatedAt); err != nil {
+		if err := rows.Scan(&b.ID, &b.Name, &b.Icon, &b.Mode, &b.StartTime, &b.EndTime, &b.DurationMin, &b.BlockOrder, &b.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan block: %w", err)
 		}
-		// Subtasks ride along: the app's block editor and list render them from
-		// template blocks.
 		subtasks, err := r.ListSubtasks(ctx, b.ID)
 		if err != nil {
 			return nil, fmt.Errorf("list block subtasks: %w", err)
 		}
 		b.Subtasks = subtasks
 		blocks = append(blocks, b)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("scan blocks: %w", err)
 	}
 	return blocks, nil
 }
@@ -419,7 +442,33 @@ func (r *ScheduleRepo) DeleteBlock(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *ScheduleRepo) ReorderBlocks(ctx context.Context, ids []string) error {
+// AddTemplateBlock attaches an existing library block to a template (junction).
+// Idempotent: attaching a block twice is a no-op.
+func (r *ScheduleRepo) AddTemplateBlock(ctx context.Context, templateID string, blockID string) error {
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO template_blocks (template_id, block_id, block_order)
+		 VALUES (?, ?, (SELECT COALESCE(MAX(block_order), -1) + 1 FROM template_blocks WHERE template_id = ?))
+		 ON CONFLICT(template_id, block_id) DO NOTHING`,
+		templateID, blockID, templateID)
+	if err != nil {
+		return fmt.Errorf("add template block: %w", err)
+	}
+	return nil
+}
+
+// RemoveTemplateBlock detaches a block from a template. The block stays in the
+// library and in any other template that references it.
+func (r *ScheduleRepo) RemoveTemplateBlock(ctx context.Context, templateID string, blockID string) error {
+	_, err := r.db.ExecContext(ctx,
+		`DELETE FROM template_blocks WHERE template_id = ? AND block_id = ?`, templateID, blockID)
+	if err != nil {
+		return fmt.Errorf("remove template block: %w", err)
+	}
+	return nil
+}
+
+// ReorderTemplateBlocks sets the order of a template's blocks from a full id list.
+func (r *ScheduleRepo) ReorderTemplateBlocks(ctx context.Context, templateID string, ids []string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
@@ -427,7 +476,8 @@ func (r *ScheduleRepo) ReorderBlocks(ctx context.Context, ids []string) error {
 	defer tx.Rollback()
 
 	for i, id := range ids {
-		_, err := tx.ExecContext(ctx, `UPDATE time_blocks SET block_order=? WHERE id=?`, i, id)
+		_, err := tx.ExecContext(ctx,
+			`UPDATE template_blocks SET block_order=? WHERE template_id=? AND block_id=?`, i, templateID, id)
 		if err != nil {
 			return fmt.Errorf("reorder block %s: %w", id, err)
 		}
@@ -542,7 +592,7 @@ func (r *ScheduleRepo) GetOrCreateEntry(ctx context.Context, date string) (*mode
 	if tmpl != nil {
 		// Check if we actually inserted (rowcount check is unreliable with INSERT OR IGNORE)
 		// Always try to create block states; GetEntry handles dedup via SELECT
-		blocks, err := r.ListBlocks(ctx, tmpl.ID)
+		blocks, err := r.ListTemplateBlocks(ctx, tmpl.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -727,8 +777,8 @@ func (r *ScheduleRepo) copyBlockToEntryTx(ctx context.Context, tx *sql.Tx, entry
 
 	newID := uuid.New().String()
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO time_blocks (id, template_id, entry_id, name, icon, mode, start_time, end_time, duration_min, block_order)
-		 VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO time_blocks (id, entry_id, name, icon, mode, start_time, end_time, duration_min, block_order)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		newID, entryID, b.name, b.icon, b.mode, b.startTime, b.endTime, b.duration, b.blockOrder)
 	if err != nil {
 		return "", nil, fmt.Errorf("copy block: insert copy: %w", err)
@@ -769,7 +819,9 @@ func (r *ScheduleRepo) copyBlockToEntryTx(ctx context.Context, tx *sql.Tx, entry
 // maps so callers can keep addressing the same logical items after the detach.
 func (r *ScheduleRepo) detachEntryFromTemplateTx(ctx context.Context, tx *sql.Tx, entryID string, templateID string) (map[string]string, map[string]string, error) {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT id FROM time_blocks WHERE template_id = ? ORDER BY block_order`, templateID)
+		`SELECT b.id FROM template_blocks tb
+		 JOIN time_blocks b ON b.id = tb.block_id
+		 WHERE tb.template_id = ? ORDER BY tb.block_order`, templateID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("detach: list blocks: %w", err)
 	}
@@ -1013,10 +1065,11 @@ func (r *ScheduleRepo) getBlockStates(ctx context.Context, entryID string, templ
 
 	if templateID != nil {
 		rows, err = r.db.QueryContext(ctx,
-			`SELECT tb.id, tb.name, tb.icon, tb.start_time, tb.end_time, tb.duration_min, tb.mode, tb.block_order,
+			`SELECT b.id, b.name, b.icon, b.start_time, b.end_time, b.duration_min, b.mode, tb.block_order,
 			        COALESCE(tbs.auto_status, 'pending'), COALESCE(tbs.manual_status, 'not_completed'), tbs.id
-			 FROM time_blocks tb
-			 LEFT JOIN time_block_states tbs ON tb.id = tbs.time_block_id AND tbs.entry_id = ?
+			 FROM template_blocks tb
+			 JOIN time_blocks b ON b.id = tb.block_id
+			 LEFT JOIN time_block_states tbs ON b.id = tbs.time_block_id AND tbs.entry_id = ?
 			 WHERE tb.template_id = ?
 			 ORDER BY tb.block_order`, entryID, *templateID)
 	} else {
@@ -1089,7 +1142,7 @@ func (r *ScheduleRepo) rebuildBlockStates(ctx context.Context, entryID string, t
 		return fmt.Errorf("delete states: %w", err)
 	}
 
-	blocks, err := r.ListBlocks(ctx, templateID)
+	blocks, err := r.ListTemplateBlocks(ctx, templateID)
 	if err != nil {
 		return err
 	}
