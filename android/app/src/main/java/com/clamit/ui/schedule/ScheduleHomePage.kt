@@ -19,6 +19,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.clamit.data.model.BlockState
+import com.clamit.data.model.Subtask
+import com.clamit.data.model.TimeBlock
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -31,6 +34,7 @@ fun ScheduleHomePage(
     onMenuClick: () -> Unit,
     onDatePicker: () -> Unit,
     onTemplatePicker: () -> Unit,
+    onEditBlock: (TimeBlock) -> Unit,
     onAddBlock: () -> Unit
 ) {
     val monthFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale("tr"))
@@ -260,7 +264,8 @@ fun ScheduleHomePage(
                                             { viewModel.removeSpecialBlockFromDay(block.timeBlockId) }
                                         } else {
                                             null
-                                        }
+                                        },
+                                        onEdit = { onEditBlock(block.toTimeBlock()) }
                                     )
                                 }
                             }
@@ -318,3 +323,18 @@ private fun EmptyDayState(onAddBlock: () -> Unit) {
         }
     }
 }
+
+/** Maps a day's block state to an editable TimeBlock (used by the day editor). */
+private fun BlockState.toTimeBlock(): TimeBlock = TimeBlock(
+    id = timeBlockId,
+    name = name,
+    icon = icon,
+    mode = mode,
+    startTime = startTime,
+    endTime = endTime,
+    durationMin = durationMin,
+    blockOrder = blockOrder,
+    subtasks = subtaskStates.mapIndexed { index, s ->
+        Subtask(id = s.subtaskId, timeBlockId = timeBlockId, name = s.name, subtaskOrder = index)
+    }
+)

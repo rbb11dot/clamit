@@ -14,6 +14,7 @@ class ScheduleRepository(private val api: ScheduleApi) {
 
     // Blocks
     suspend fun createBlock(templateId: String, req: CreateBlockRequest) = api.createBlock(templateId, req)
+    suspend fun updateBlock(id: String, req: UpdateBlockRequest) = api.updateBlock(id, req)
     suspend fun deleteBlock(id: String) = api.deleteBlock(id)
 
     // Subtasks
@@ -27,6 +28,8 @@ class ScheduleRepository(private val api: ScheduleApi) {
         api.setEntryTemplate(date, SetTemplateRequest(templateId))
     suspend fun addSpecialBlock(date: String, blockId: String) =
         api.addSpecialBlock(date, AddBlockRequest(blockId))
+    suspend fun updateEntryBlock(date: String, blockId: String, req: UpdateBlockRequest) =
+        api.updateEntryBlock(date, blockId, req)
     suspend fun removeSpecialBlock(date: String, blockId: String) =
         api.removeSpecialBlock(date, blockId)
 

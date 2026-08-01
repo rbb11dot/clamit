@@ -14,9 +14,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.clamit.data.model.TimeBlock
 import kotlinx.coroutines.launch
 
 enum class SchedulePage { HOME, TEMPLATES, BLOCKS }
+
+/** What the block editor should do: create (block=null) or edit a block,
+ *  and whether the edit targets the current day (day-owned copy, detaches
+ *  template-linked days) or the library. */
+data class BlockEditorRequest(
+    val block: TimeBlock? = null,
+    val addToCurrentDay: Boolean = false,
+    val editDay: Boolean = false
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -27,15 +37,14 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
     var currentPage by remember { mutableStateOf(SchedulePage.HOME) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTemplatePicker by remember { mutableStateOf(false) }
-    var showBlockEditor by remember { mutableStateOf(false) }
-    var blockEditorAddToDay by remember { mutableStateOf(false) }
+    var blockEditorRequest by remember { mutableStateOf<BlockEditorRequest?>(null) }
     var showTemplateEditor by remember { mutableStateOf(false) }
     val activity = LocalContext.current as? android.app.Activity
 
     // Full-screen editors overlay everything: Back must dismiss the editor first,
     // never exit the app or navigate away underneath it. Registered last so it wins.
-    BackHandler(enabled = showBlockEditor || showTemplateEditor) {
-        showBlockEditor = false
+    BackHandler(enabled = blockEditorRequest != null || showTemplateEditor) {
+        blockEditorRequest = null
         showTemplateEditor = false
     }
     BackHandler(enabled = drawerState.isOpen) {
@@ -133,9 +142,11 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
                 onMenuClick = { scope.launch { drawerState.open() } },
                 onDatePicker = { showDatePicker = true },
                 onTemplatePicker = { showTemplatePicker = true },
+                onEditBlock = { block ->
+                    blockEditorRequest = BlockEditorRequest(block = block, editDay = true)
+                },
                 onAddBlock = {
-                    blockEditorAddToDay = true
-                    showBlockEditor = true
+                    blockEditorRequest = BlockEditorRequest(addToCurrentDay = true)
                 }
             )
 
@@ -150,20 +161,23 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
                 viewModel = viewModel,
                 uiState = uiState,
                 onMenuClick = { scope.launch { drawerState.open() } },
-                onNewBlock = {
-                    blockEditorAddToDay = false
-                    showBlockEditor = true
-                }
+                onNewBlock = { blockEditorRequest = BlockEditorRequest() },
+                onEditBlock = { block -> blockEditorRequest = BlockEditorRequest(block = block) }
             )
         }
     }
 
     if (showDatePicker) DatePickerDialog(viewModel, uiState) { showDatePicker = false }
     if (showTemplatePicker) TemplatePickerDialog(viewModel, uiState) { showTemplatePicker = false }
-    if (showBlockEditor) BlockEditorPage(
-        onDismiss = { showBlockEditor = false },
-        viewModel = viewModel,
-        addToCurrentDay = blockEditorAddToDay
-    )
+    blockEditorRequest?.let { req ->
+        BlockEditorPage(
+            onDismiss = { blockEditorRequest = null },
+            viewModel = viewModel,
+            uiState = uiState,
+            addToCurrentDay = req.addToCurrentDay,
+            blockToEdit = req.block,
+            editDayBlock = req.editDay
+        )
+    }
     if (showTemplateEditor) TemplateEditorPage(onDismiss = { showTemplateEditor = false }, viewModel = viewModel, uiState = uiState)
 }

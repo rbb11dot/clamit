@@ -159,20 +159,89 @@ class ScheduleViewModel(
         }
     }
 
-    /** Adds an existing block to the current day (copy-on-write: a template-linked day
-     *  detaches and becomes a standalone special day). Returns false on failure. */
-    suspend fun addSpecialBlockToCurrentDaySuspended(blockId: String): Boolean {
-        return try {
-            repository.addSpecialBlock(currentDateStr(), blockId)
-            load()
-            true
-        } catch (e: Exception) {
-            _uiState.value = _uiState.value.copy(
-                error = e.message ?: "Güne eklenemedi"
-            )
-            false
-        }
-    }
+	/** Adds an existing block to the current day (copy-on-write: a template-linked day
+	 *  detaches and becomes a standalone special day). Returns false on failure. */
+	suspend fun addSpecialBlockToCurrentDaySuspended(blockId: String): Boolean {
+		return try {
+			repository.addSpecialBlock(currentDateStr(), blockId)
+			load()
+			true
+		} catch (e: Exception) {
+			_uiState.value = _uiState.value.copy(
+				error = e.message ?: "Güne eklenemedi"
+			)
+			false
+		}
+	}
+
+	/** Full-save edit of a library block (fields + subtask sync). Returns false on failure. */
+	suspend fun updateBlockSuspended(
+		blockId: String,
+		name: String,
+		icon: String,
+		mode: String,
+		startTime: String,
+		endTime: String?,
+		durationMin: Int?,
+		subtasks: List<Pair<String?, String>>
+	): Boolean {
+		return try {
+			repository.updateBlock(blockId, buildUpdateRequest(name, icon, mode, startTime, endTime, durationMin, subtasks))
+			load()
+			true
+		} catch (e: Exception) {
+			_uiState.value = _uiState.value.copy(
+				error = e.message ?: "Blok güncellenemedi"
+			)
+			false
+		}
+	}
+
+	/** Full-save edit of a block inside the current day (template-linked days detach
+	 *  first, server-side, so the day becomes special and the template is untouched).
+	 *  Returns false on failure. */
+	suspend fun updateEntryBlockSuspended(
+		blockId: String,
+		name: String,
+		icon: String,
+		mode: String,
+		startTime: String,
+		endTime: String?,
+		durationMin: Int?,
+		subtasks: List<Pair<String?, String>>
+	): Boolean {
+		return try {
+			repository.updateEntryBlock(
+				currentDateStr(), blockId,
+				buildUpdateRequest(name, icon, mode, startTime, endTime, durationMin, subtasks)
+			)
+			load()
+			true
+		} catch (e: Exception) {
+			_uiState.value = _uiState.value.copy(
+				error = e.message ?: "Blok güncellenemedi"
+			)
+			false
+		}
+	}
+
+	private fun buildUpdateRequest(
+		name: String,
+		icon: String,
+		mode: String,
+		startTime: String,
+		endTime: String?,
+		durationMin: Int?,
+		subtasks: List<Pair<String?, String>>
+	): UpdateBlockRequest = UpdateBlockRequest(
+		name = name,
+		icon = icon,
+		mode = mode,
+		startTime = startTime,
+		endTime = endTime,
+		durationMin = durationMin,
+		subtasks = subtasks.map { (id, text) -> SubtaskSyncRequest(id = id, name = text) }
+	)
 
     fun toggleSubtask(blockId: String, subtaskId: String) {
         if (mutating) return
