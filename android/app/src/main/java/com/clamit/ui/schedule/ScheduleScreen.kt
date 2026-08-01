@@ -1,9 +1,7 @@
 package com.clamit.ui.schedule
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -62,8 +60,6 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
         drawerState = drawerState,
         drawerContent = {
             ModalDrawerSheet(
-                drawerContainerColor = MaterialTheme.colorScheme.surface,
-                drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp),
                 modifier = Modifier.width(292.dp)
             ) {
                 Spacer(Modifier.height(20.dp))
@@ -95,7 +91,6 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
                         currentPage = SchedulePage.HOME
                         scope.launch { drawerState.close() }
                     },
-                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
                 )
                 NavigationDrawerItem(
@@ -111,7 +106,6 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
                         currentPage = SchedulePage.TEMPLATES
                         scope.launch { drawerState.close() }
                     },
-                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
                 )
                 NavigationDrawerItem(
@@ -122,7 +116,6 @@ fun ScheduleScreen(viewModel: ScheduleViewModel) {
                         currentPage = SchedulePage.BLOCKS
                         scope.launch { drawerState.close() }
                     },
-                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
                 )
 

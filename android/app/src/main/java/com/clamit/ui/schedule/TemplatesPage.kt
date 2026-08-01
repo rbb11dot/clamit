@@ -2,13 +2,11 @@ package com.clamit.ui.schedule
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -41,9 +39,6 @@ fun TemplatesPage(
     Scaffold(
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                ),
                 navigationIcon = {
                     IconButton(onClick = onMenuClick) {
                         Icon(Icons.Default.Menu, contentDescription = "Menü")
@@ -60,11 +55,7 @@ fun TemplatesPage(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = onNewTemplate,
-                shape = RoundedCornerShape(20.dp),
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                elevation = FloatingActionButtonDefaults.elevation(6.dp)
+                onClick = onNewTemplate
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Yeni şablon")
                 Spacer(modifier = Modifier.width(8.dp))
@@ -89,7 +80,6 @@ fun TemplatesPage(
                     horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(24.dp),
                         color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         modifier = Modifier.size(96.dp)
                     ) {
@@ -176,15 +166,7 @@ private fun TemplateCardItem(
     val dayAbbreviations = listOf("Pzr", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt")
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .border(
-                1.dp,
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                RoundedCornerShape(20.dp)
-            ),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -193,7 +175,6 @@ private fun TemplateCardItem(
             ) {
                 // Icon Tile
                 Surface(
-                    shape = RoundedCornerShape(14.dp),
                     color = MaterialTheme.colorScheme.primaryContainer,
                     modifier = Modifier.size(44.dp)
                 ) {
@@ -260,7 +241,6 @@ private fun TemplateCardItem(
                 dayAbbreviations.forEachIndexed { index, shortName ->
                     val isSelected = index in template.repeatDays
                     Surface(
-                        shape = CircleShape,
                         color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer
                         else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
                     ) {
@@ -324,9 +304,6 @@ fun TemplateEditorPage(
     Scaffold(
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                ),
                 title = {
                     Text(
                         if (templateToEdit != null) "Şablonu Düzenle" else "Gün Şablonu Oluştur",
@@ -361,7 +338,6 @@ fun TemplateEditorPage(
                         label = { Text("Şablon adı") },
                         placeholder = { Text("Haftaiçi") },
                         singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -376,7 +352,6 @@ fun TemplateEditorPage(
                 )
                 Spacer(Modifier.height(8.dp))
                 Card(
-                    shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
@@ -420,7 +395,6 @@ fun TemplateEditorPage(
 				)
 				Spacer(Modifier.height(8.dp))
 				Card(
-					shape = RoundedCornerShape(16.dp),
 					colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
 				) {
 					Column(modifier = Modifier.padding(12.dp)) {
@@ -473,7 +447,6 @@ fun TemplateEditorPage(
 						Spacer(Modifier.height(4.dp))
 						OutlinedButton(
 							onClick = { showBlockPicker = true },
-							shape = RoundedCornerShape(12.dp),
 							modifier = Modifier.fillMaxWidth()
 						) {
 							Icon(Icons.Default.Add, contentDescription = null)
@@ -522,7 +495,6 @@ fun TemplateEditorPage(
                         }
                     },
                     enabled = name.isNotBlank() && selectedDays.isNotEmpty() && !saving,
-                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(48.dp)
@@ -611,7 +583,6 @@ fun TemplateEditorPage(
                                 onDismiss()
                             }
                         },
-                        shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth().height(44.dp)
                     ) {
                         Text("Evet", fontWeight = FontWeight.Bold)
@@ -621,7 +592,6 @@ fun TemplateEditorPage(
                             showConflictDialog = false
                             onDismiss()
                         },
-                        shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth().height(44.dp)
                     ) {
                         Text("Hayır", fontWeight = FontWeight.SemiBold)
@@ -675,9 +645,6 @@ private fun ConflictDaysPage(
     Scaffold(
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                ),
                 title = {
                     Text(
                         "Uygulanacak Günler",
@@ -741,7 +708,6 @@ private fun ConflictDaysPage(
             Button(
                 onClick = { onApply(selected.toList()) },
                 enabled = selected.isNotEmpty(),
-                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)

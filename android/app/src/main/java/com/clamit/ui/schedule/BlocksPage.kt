@@ -1,21 +1,16 @@
 package com.clamit.ui.schedule
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -47,9 +42,6 @@ fun BlocksPage(
     Scaffold(
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                ),
                 navigationIcon = {
                     IconButton(onClick = onMenuClick) {
                         Icon(Icons.Default.Menu, contentDescription = "Menü")
@@ -66,11 +58,7 @@ fun BlocksPage(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = onNewBlock,
-                shape = RoundedCornerShape(20.dp),
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                elevation = FloatingActionButtonDefaults.elevation(6.dp)
+                onClick = onNewBlock
             ) {
                 Icon(Icons.Default.Add, contentDescription = "Yeni blok")
                 Spacer(modifier = Modifier.width(8.dp))
@@ -96,7 +84,6 @@ fun BlocksPage(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(24.dp),
                         color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         modifier = Modifier.size(96.dp)
                     ) {
@@ -175,15 +162,7 @@ private fun TimeBlockListItem(
     onDelete: () -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .border(
-                1.dp,
-                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                RoundedCornerShape(20.dp)
-            ),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -192,7 +171,6 @@ private fun TimeBlockListItem(
             ) {
                 // Icon Box
                 Surface(
-                    shape = RoundedCornerShape(14.dp),
                     color = MaterialTheme.colorScheme.secondaryContainer,
                     modifier = Modifier.size(44.dp)
                 ) {
@@ -234,12 +212,7 @@ private fun TimeBlockListItem(
 
                 // Template membership badges (a block can belong to several templates)
                 Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                    )
+                    color = MaterialTheme.colorScheme.primaryContainer
                 ) {
                     Text(
                         text = templateNames.joinToString(", ").ifEmpty { "Şablonsuz" },
@@ -407,9 +380,6 @@ fun BlockEditorPage(
     Scaffold(
         topBar = {
             TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainer
-                ),
                 title = {
                     Text(
                         if (isEdit) editingTitle else "Zaman Bloğu Oluştur",
@@ -444,7 +414,6 @@ fun BlockEditorPage(
                         label = { Text("Blok adı") },
                         placeholder = { Text("Sabah rutini") },
                         singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -455,7 +424,6 @@ fun BlockEditorPage(
             if (!isEdit && !addToCurrentDay) {
                 item {
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
                         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -484,7 +452,6 @@ fun BlockEditorPage(
             if (editDayBlock && uiState.entry?.templateId != null) {
                 item {
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
                         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -511,13 +478,11 @@ fun BlockEditorPage(
                         selected = mode == "start_end",
                         onClick = { mode = "start_end" },
                         label = { Text("Başlangıç + Bitiş") },
-                        shape = RoundedCornerShape(12.dp)
                     )
                     FilterChip(
                         selected = mode == "start_duration",
                         onClick = { mode = "start_duration" },
                         label = { Text("Başlangıç + Süre") },
-                        shape = RoundedCornerShape(12.dp)
                     )
                 }
             }
@@ -539,7 +504,6 @@ fun BlockEditorPage(
                         onValueChange = { if (it.length <= 2) startHour = it },
                         label = { Text("Saat") },
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f)
                     )
                     Text(":", fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -548,7 +512,6 @@ fun BlockEditorPage(
                         onValueChange = { if (it.length <= 2) startMin = it },
                         label = { Text("Dakika") },
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -571,7 +534,6 @@ fun BlockEditorPage(
                             onValueChange = { if (it.length <= 2) endHour = it },
                             label = { Text("Saat") },
                             singleLine = true,
-                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.weight(1f)
                         )
                         Text(":", fontSize = 20.sp, fontWeight = FontWeight.Bold)
@@ -580,7 +542,6 @@ fun BlockEditorPage(
                             onValueChange = { if (it.length <= 2) endMin = it },
                             label = { Text("Dakika") },
                             singleLine = true,
-                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -598,7 +559,6 @@ fun BlockEditorPage(
                         onValueChange = { if (it.length <= 3) duration = it },
                         label = { Text("Süre (dakika)") },
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -626,7 +586,6 @@ fun BlockEditorPage(
 
             itemsIndexed(subtasks, key = { _, draft -> draft.id }) { index, subtask ->
                 Card(
-                    shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -636,7 +595,6 @@ fun BlockEditorPage(
                     ) {
                         // Order Pill Badge
                         Surface(
-                            shape = CircleShape,
                             color = MaterialTheme.colorScheme.secondaryContainer,
                             modifier = Modifier.size(28.dp)
                         ) {
@@ -660,7 +618,6 @@ fun BlockEditorPage(
                             },
                             placeholder = { Text("Subtask ${index + 1}") },
                             singleLine = true,
-                            shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.weight(1f)
                         )
 
@@ -717,7 +674,6 @@ fun BlockEditorPage(
                         subtasks = subtasks + SubtaskDraft(nextSubtaskId, "")
                         nextSubtaskId++
                     },
-                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
@@ -744,7 +700,6 @@ fun BlockEditorPage(
                 Button(
                     onClick = ::save,
                     enabled = name.isNotBlank() && timeValid && !saving,
-                    shape = RoundedCornerShape(14.dp),
                     modifier = Modifier.fillMaxWidth().height(48.dp)
                 ) {
                     if (saving) {
@@ -776,7 +731,6 @@ fun ErrorBanner(error: String?, onDismiss: () -> Unit) {
             containerColor = MaterialTheme.colorScheme.errorContainer,
             contentColor = MaterialTheme.colorScheme.onErrorContainer
         ),
-        shape = RoundedCornerShape(14.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
