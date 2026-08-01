@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/yourusername/clamit/internal/db"
@@ -42,6 +41,7 @@ func (h *ScheduleHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/schedule/{date}", h.getEntry)
 	mux.HandleFunc("PUT /api/schedule/{date}/template", h.setEntryTemplate)
 	mux.HandleFunc("POST /api/schedule/{date}/blocks", h.addSpecialBlock)
+	mux.HandleFunc("PATCH /api/schedule/{date}/blocks/{bid}", h.updateEntryBlock)
 	mux.HandleFunc("DELETE /api/schedule/{date}/blocks/{bid}", h.removeSpecialBlock)
 
 	// Create entry (POST to avoid GET side-effects)
@@ -94,15 +94,18 @@ func (h *ScheduleHandler) getTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 	// Also load blocks
 	blocks, err := h.repo.ListBlocks(r.Context(), id)
-	if err == nil {
-		type templateWithBlocks struct {
-			models.DayTemplate
-			Blocks []models.TimeBlock `json:"blocks"`
-		}
-		writeJSON(w, http.StatusOK, templateWithBlocks{*tmpl, blocks})
+	if err != nil {
+		writeJSON(w, http.StatusOK, tmpl)
 		return
 	}
-	writeJSON(w, http.StatusOK, tmpl)
+	if blocks == nil {
+		blocks = []models.TimeBlock{}
+	}
+	type templateWithBlocks struct {
+		models.DayTemplate
+		Blocks []models.TimeBlock `json:"blocks"`
+	}
+	writeJSON(w, http.StatusOK, templateWithBlocks{*tmpl, blocks})
 }
 
 func (h *ScheduleHandler) updateTemplate(w http.ResponseWriter, r *http.Request) {
@@ -157,7 +160,7 @@ func (h *ScheduleHandler) updateBlock(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
 		return
 	}
-	block, err := h.repo.UpdateBlock(r.Context(), id, req)
+	block, err := h.repo.SaveBlock(r.Context(), id, req)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -254,18 +257,11 @@ func (h *ScheduleHandler) getEntry(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid date"})
 		return
 	}
-	entry, err := h.repo.GetEntry(r.Context(), date)
+	// Spec: GET /api/schedule/:date → GetEntry (create if not exist). Every day
+	// has exactly one entry row, so a read always materializes the day.
+	entry, err := h.repo.GetOrCreateEntry(r.Context(), date)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-	if entry == nil {
-		// Return an empty entry with today's date so the app doesn't crash
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"date":      date,
-			"isSpecial": false,
-			"blocks":    []interface{}{},
-		})
 		return
 	}
 	writeJSON(w, http.StatusOK, entry)
@@ -336,6 +332,29 @@ func (h *ScheduleHandler) removeSpecialBlock(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// updateEntryBlock edits one block of a specific day. Editing a template-linked
+// day first detaches it (copy-on-write) so the day becomes a standalone special
+// day and the shared template is never mutated. Returns the updated entry.
+func (h *ScheduleHandler) updateEntryBlock(w http.ResponseWriter, r *http.Request) {
+	date := r.PathValue("date")
+	if !validateDate(date) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid date"})
+		return
+	}
+	bid := r.PathValue("bid")
+	var req models.UpdateBlockReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+	entry, err := h.repo.SaveEntryBlock(r.Context(), date, bid, req)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, entry)
 }
 
 // ---- Status ----
@@ -412,21 +431,4 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)
-}
-
-// extractIDs parses a comma-separated list of IDs from a query param
-func extractIDs(r *http.Request, key string) []string {
-	raw := r.URL.Query().Get(key)
-	if raw == "" {
-		return nil
-	}
-	parts := strings.Split(raw, ",")
-	var ids []string
-	for _, p := range parts {
-		trimmed := strings.TrimSpace(p)
-		if trimmed != "" {
-			ids = append(ids, trimmed)
-		}
-	}
-	return ids
 }
