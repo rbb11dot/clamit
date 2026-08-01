@@ -45,6 +45,23 @@ data class CreateBlockRequest(
     val subtasks: List<SubtaskRequest> = emptyList()
 )
 
+/** One subtask entry of a full save: existing id (null = create new) + name. */
+data class SubtaskSyncRequest(
+    val id: String? = null,
+    val name: String
+)
+
+/** Full-save block edit: fields plus a complete subtask list (replaces existing). */
+data class UpdateBlockRequest(
+    val name: String? = null,
+    val icon: String? = null,
+    val mode: String? = null,
+    val startTime: String? = null,
+    val endTime: String? = null,
+    val durationMin: Int? = null,
+    val subtasks: List<SubtaskSyncRequest>? = null
+)
+
 data class SubtaskRequest(
     val name: String
 )

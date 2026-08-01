@@ -32,7 +32,8 @@ fun TimeBlockCard(
     onToggleSubtask: (String) -> Unit,
     onSetCompleted: () -> Unit,
     onSetNotCompleted: () -> Unit,
-    onRemoveFromDay: (() -> Unit)? = null
+    onRemoveFromDay: (() -> Unit)? = null,
+    onEdit: (() -> Unit)? = null
 ) {
     var confirmRemove by remember { mutableStateOf(false) }
     val isCompleted = block.manualStatus == "completed"
@@ -176,8 +177,22 @@ fun TimeBlockCard(
                         )
                     }
 
-                    // Remove from day (special days only): re-addable from the library
-                    if (onRemoveFromDay != null) {
+					// Edit: day blocks only are editable here (library edits live on the
+					// Zaman Blokları page). A template-linked day detaches on save.
+					if (onEdit != null) {
+						Spacer(Modifier.width(4.dp))
+						IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
+							Icon(
+								Icons.Default.Edit,
+								contentDescription = "Bloğu düzenle",
+								tint = MaterialTheme.colorScheme.primary,
+								modifier = Modifier.size(18.dp)
+							)
+						}
+					}
+
+					// Remove from day (special days only): re-addable from the library
+					if (onRemoveFromDay != null) {
                         Spacer(Modifier.width(4.dp))
                         IconButton(onClick = { confirmRemove = true }, modifier = Modifier.size(32.dp)) {
                             Icon(

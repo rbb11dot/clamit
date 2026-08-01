@@ -30,7 +30,8 @@ fun BlocksPage(
     viewModel: ScheduleViewModel,
     uiState: ScheduleUiState,
     onMenuClick: () -> Unit,
-    onNewBlock: () -> Unit
+    onNewBlock: () -> Unit,
+    onEditBlock: (TimeBlock) -> Unit
 ) {
     // Extract all blocks from templates
     val allBlocksWithTemplates = remember(uiState.templates) {
@@ -131,6 +132,7 @@ fun BlocksPage(
                         TimeBlockListItem(
                             block = block,
                             templateName = template.name,
+                            onEdit = { onEditBlock(block) },
                             onDelete = { blockToDelete = block }
                         )
                     }
@@ -167,6 +169,7 @@ fun BlocksPage(
 private fun TimeBlockListItem(
     block: TimeBlock,
     templateName: String,
+    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     Card(
@@ -247,6 +250,15 @@ private fun TimeBlockListItem(
 
                 Spacer(modifier = Modifier.width(4.dp))
 
+                // Edit Button
+                IconButton(onClick = onEdit) {
+                    Icon(
+                        Icons.Default.Edit,
+                        contentDescription = "Düzenle",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+
                 // Delete Button
                 IconButton(onClick = onDelete) {
                     Icon(
@@ -285,28 +297,54 @@ private fun TimeBlockListItem(
 // ---- Full Screen Block Editor ----
 
 /** Draft row with a stable id so LazyColumn keys keep focus/cursor on the row,
- *  not the position, after a reorder. */
-private data class SubtaskDraft(val id: Long, val text: String)
+ *  not the position, after a reorder. serverId is the existing subtask's id
+ *  when editing, so the backend can keep toggle history on renames. */
+private data class SubtaskDraft(val id: Long, val text: String, val serverId: String? = null)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BlockEditorPage(
     onDismiss: () -> Unit,
     viewModel: ScheduleViewModel,
-    addToCurrentDay: Boolean = false
+    uiState: ScheduleUiState,
+    addToCurrentDay: Boolean = false,
+    blockToEdit: TimeBlock? = null,
+    editDayBlock: Boolean = false
 ) {
-    var name by remember { mutableStateOf("") }
-    var blockIcon by remember { mutableStateOf("alarm") }
-    var mode by remember { mutableStateOf("start_end") }
-    var startHour by remember { mutableStateOf("07") }
-    var startMin by remember { mutableStateOf("00") }
-    var endHour by remember { mutableStateOf("07") }
-    var endMin by remember { mutableStateOf("30") }
-    var duration by remember { mutableStateOf("30") }
-    var subtasks by remember { mutableStateOf(listOf(SubtaskDraft(0, ""))) }
-    var nextSubtaskId by remember { mutableLongStateOf(1L) }
+    val isEdit = blockToEdit != null
+    val editingTitle = if (editDayBlock) "Gün Bloğunu Düzenle" else "Zaman Bloğunu Düzenle"
+
+    var name by remember(blockToEdit) { mutableStateOf(blockToEdit?.name ?: "") }
+    var blockIcon by remember(blockToEdit) { mutableStateOf(blockToEdit?.icon ?: "alarm") }
+    var mode by remember(blockToEdit) { mutableStateOf(blockToEdit?.mode ?: "start_end") }
+    var startHour by remember(blockToEdit) { mutableStateOf(blockToEdit?.startTime?.substringBefore(":") ?: "07") }
+    var startMin by remember(blockToEdit) { mutableStateOf(blockToEdit?.startTime?.substringAfter(":") ?: "00") }
+    var endHour by remember(blockToEdit) {
+        mutableStateOf(blockToEdit?.endTime?.substringBefore(":") ?: "07")
+    }
+    var endMin by remember(blockToEdit) {
+        mutableStateOf(blockToEdit?.endTime?.substringAfter(":") ?: "30")
+    }
+    var duration by remember(blockToEdit) { mutableStateOf(blockToEdit?.durationMin?.toString() ?: "30") }
+    var subtasks by remember(blockToEdit) {
+        mutableStateOf(
+            blockToEdit?.subtasks?.mapIndexed { index, s ->
+                SubtaskDraft(id = index.toLong(), text = s.name, serverId = s.id)
+            }?.ifEmpty { listOf(SubtaskDraft(0, "")) } ?: listOf(SubtaskDraft(0, ""))
+        )
+    }
+    var nextSubtaskId by remember(blockToEdit) { mutableLongStateOf((blockToEdit?.subtasks?.size ?: 0).toLong() + 1) }
     var saving by remember { mutableStateOf(false) }
     var validationError by remember { mutableStateOf<String?>(null) }
+
+    // Target template when creating a block from the library page.
+    val templateOptions = uiState.templates
+    val defaultTemplateId = remember(blockToEdit) {
+        uiState.entry?.templateId?.takeIf { tid -> templateOptions.any { it.id == tid } }
+            ?: templateOptions.firstOrNull()?.id
+    }
+    var selectedTemplateId by remember(blockToEdit) { mutableStateOf(defaultTemplateId) }
+    var templateMenuOpen by remember { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
 
@@ -336,39 +374,56 @@ fun BlockEditorPage(
             validationError = "Geçersiz saat. Saat 0-23, dakika 0-59 arasında olmalı."
             return
         }
+        if (!isEdit && selectedTemplateId == null && templateOptions.isNotEmpty()) {
+            validationError = "Bir şablon seçin."
+            return
+        }
         validationError = null
         saving = true
         scope.launch {
             val st = "${startHour.padStart(2, '0')}:${startMin.padStart(2, '0')}"
             val et = if (mode == "start_end") "${endHour.padStart(2, '0')}:${endMin.padStart(2, '0')}" else null
             val durMin = if (mode == "start_duration") dur else null
+            val drafts = subtasks.filter { it.text.isNotBlank() }
 
-            // Sequential save: resolve/create the template FIRST, then create the block
-            // with the real template id — never a fire-and-forget createTemplate followed
-            // by a synchronous read of the stale template list.
-            val templateId = viewModel.ensureTemplateId()
-            val blockId = if (templateId != null) {
-                viewModel.createBlockSuspended(
-                    templateId,
-                    name.trim(),
-                    blockIcon,
-                    mode,
-                    st,
-                    et,
-                    durMin,
-                    subtasks.map { it.text }.filter { it.isNotBlank() }
+            val ok = when {
+                isEdit && editDayBlock -> viewModel.updateEntryBlockSuspended(
+                    blockToEdit!!.id, name.trim(), blockIcon, mode, st, et, durMin,
+                    drafts.map { it.serverId to it.text.trim() }
                 )
-            } else {
-                null
-            }
-
-            // Opened from the home page FAB: the new block must land on the current day.
-            if (blockId != null && addToCurrentDay) {
-                viewModel.addSpecialBlockToCurrentDaySuspended(blockId)
+                isEdit -> viewModel.updateBlockSuspended(
+                    blockToEdit!!.id, name.trim(), blockIcon, mode, st, et, durMin,
+                    drafts.map { it.serverId to it.text.trim() }
+                )
+                else -> {
+                    // Sequential save: resolve/create the template FIRST, then create the block
+                    // with the real template id — never a fire-and-forget createTemplate followed
+                    // by a synchronous read of the stale template list.
+                    val templateId = selectedTemplateId ?: viewModel.ensureTemplateId()
+                    if (templateId == null) {
+                        false
+                    } else {
+                        val blockId = viewModel.createBlockSuspended(
+                            templateId,
+                            name.trim(),
+                            blockIcon,
+                            mode,
+                            st,
+                            et,
+                            durMin,
+                            drafts.map { it.text.trim() }
+                        )
+                        // Opened from the home page FAB: the new block must land on the current day.
+                        if (blockId != null && addToCurrentDay) {
+                            viewModel.addSpecialBlockToCurrentDaySuspended(blockId)
+                        }
+                        blockId != null
+                    }
+                }
             }
 
             saving = false
-            if (blockId != null) onDismiss()
+            if (ok) onDismiss()
             // On failure uiState.error is set by the ViewModel; the editor stays open for retry.
         }
     }
@@ -381,7 +436,7 @@ fun BlockEditorPage(
                 ),
                 title = {
                     Text(
-                        "Zaman Bloğu Oluştur",
+                        if (isEdit) editingTitle else "Zaman Bloğu Oluştur",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
@@ -416,6 +471,75 @@ fun BlockEditorPage(
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.weight(1f)
                     )
+                }
+            }
+
+            // Target template (only when creating from the library page).
+            if (!isEdit && !addToCurrentDay) {
+                item {
+                    Text(
+                        "Şablon",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    if (templateOptions.isEmpty()) {
+                        Text(
+                            "Henüz şablon yok — kaydederken otomatik oluşturulacak.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    } else {
+                        ExposedDropdownMenuBox(
+                            expanded = templateMenuOpen,
+                            onExpandedChange = { templateMenuOpen = it }
+                        ) {
+                            OutlinedTextField(
+                                value = templateOptions.firstOrNull { it.id == selectedTemplateId }?.name ?: "Şablon seç",
+                                onValueChange = {},
+                                readOnly = true,
+                                singleLine = true,
+                                label = { Text("Şablon seç") },
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateMenuOpen) },
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                            )
+                            ExposedDropdownMenu(
+                                expanded = templateMenuOpen,
+                                onDismissRequest = { templateMenuOpen = false }
+                            ) {
+                                templateOptions.forEach { t ->
+                                    DropdownMenuItem(
+                                        text = { Text(t.name) },
+                                        onClick = {
+                                            selectedTemplateId = t.id
+                                            templateMenuOpen = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Day edit hint: editing a template-linked day detaches it.
+            if (editDayBlock && uiState.entry?.templateId != null) {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "Bu düzenleme günü şablondan ayırır: gün özel güne dönüşür ve şablon etkilenmez.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                    }
                 }
             }
 

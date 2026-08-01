@@ -25,6 +25,9 @@ interface ScheduleApi {
     @POST("api/templates/{tid}/blocks")
     suspend fun createBlock(@Path("tid") tid: String, @Body req: CreateBlockRequest): TimeBlock
 
+    @PUT("api/blocks/{bid}")
+    suspend fun updateBlock(@Path("bid") bid: String, @Body req: UpdateBlockRequest): TimeBlock
+
     @DELETE("api/blocks/{bid}")
     suspend fun deleteBlock(@Path("bid") bid: String)
 
@@ -47,6 +50,9 @@ interface ScheduleApi {
 
     @POST("api/schedule/{date}/blocks")
     suspend fun addSpecialBlock(@Path("date") date: String, @Body req: AddBlockRequest)
+
+    @PATCH("api/schedule/{date}/blocks/{bid}")
+    suspend fun updateEntryBlock(@Path("date") date: String, @Path("bid") bid: String, @Body req: UpdateBlockRequest): ScheduleEntry
 
     @DELETE("api/schedule/{date}/blocks/{bid}")
     suspend fun removeSpecialBlock(@Path("date") date: String, @Path("bid") bid: String)
