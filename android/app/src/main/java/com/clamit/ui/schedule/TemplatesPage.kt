@@ -1,5 +1,6 @@
 package com.clamit.ui.schedule
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +23,9 @@ import androidx.compose.ui.unit.sp
 import com.clamit.data.model.DayTemplate
 import com.clamit.data.model.TimeBlock
 import kotlinx.coroutines.launch
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -294,6 +298,12 @@ fun TemplateEditorPage(
     }
     var showBlockPicker by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
+    // Special-day adoption: after a successful save, days materialized as
+    // special before this template existed are offered for conversion.
+    var adoptableDates by remember { mutableStateOf<List<String>?>(null) }
+    var showConflictDialog by remember { mutableStateOf(false) }
+    var showConflictPicker by remember { mutableStateOf(false) }
+    var savedTemplateId by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     // Blocks picked for a not-yet-created template (create mode).
@@ -482,19 +492,32 @@ fun TemplateEditorPage(
                         if (!saving) {
                             saving = true
                             scope.launch {
-                                if (templateToEdit != null) {
-                                    viewModel.updateTemplate(templateToEdit.id, name, templateIcon, selectedDays.toList())
-                                    saving = false
-                                    onDismiss()
+                                val tid: String? = if (templateToEdit != null) {
+                                    val ok = viewModel.updateTemplateSuspended(
+                                        templateToEdit.id, name, templateIcon, selectedDays.toList()
+                                    )
+                                    if (ok) templateToEdit.id else null
                                 } else {
-                                    val tid = viewModel.createTemplateSuspended(name, templateIcon, selectedDays.toList())
-                                    saving = false
-                                    if (tid != null) {
-                                        viewModel.attachBlocksSuspended(tid, pendingBlocks.map { it.id })
+                                    val newId = viewModel.createTemplateSuspended(name, templateIcon, selectedDays.toList())
+                                    if (newId != null) {
+                                        viewModel.attachBlocksSuspended(newId, pendingBlocks.map { it.id })
+                                    }
+                                    newId
+                                }
+                                saving = false
+                                if (tid != null) {
+                                    // Offer adoption when pre-existing special days match the
+                                    // selected repeat days; otherwise close straight away.
+                                    val dates = viewModel.fetchSpecialDaysSuspended(tid)
+                                    if (dates.isNotEmpty()) {
+                                        savedTemplateId = tid
+                                        adoptableDates = dates
+                                        showConflictDialog = true
+                                    } else {
                                         onDismiss()
                                     }
-                                    // On failure the ViewModel surfaces the error; the editor stays open.
                                 }
+                                // On failure the ViewModel surfaces the error; the editor stays open.
                             }
                         }
                     },
@@ -560,5 +583,175 @@ fun TemplateEditorPage(
                 TextButton(onClick = { showBlockPicker = false }) { Text("Kapat") }
             }
         )
+    }
+
+    // Three-way choice for adoptable special days (shown after a successful save).
+    // The dialog is a separate window: it must be dismissed before the picker
+    // page opens, or it would float above the full-screen page.
+    if (showConflictDialog) adoptableDates?.let { dates ->
+        AlertDialog(
+            onDismissRequest = { },
+            title = { Text("Özel günler bulundu", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "Seçilen tekrarlanan günlerde özel gün olarak kaydedilmiş ${dates.size} gün var. " +
+                        "Bu günlere şablon uygulansın mı? Uygulanan günlerin mevcut içeriği şablonla değiştirilir."
+                )
+            },
+            confirmButton = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Button(
+                        onClick = {
+                            showConflictDialog = false
+                            scope.launch {
+                                savedTemplateId?.let { viewModel.applyTemplateToDatesSuspended(it, dates) }
+                                onDismiss()
+                            }
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth().height(44.dp)
+                    ) {
+                        Text("Evet", fontWeight = FontWeight.Bold)
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            showConflictDialog = false
+                            onDismiss()
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth().height(44.dp)
+                    ) {
+                        Text("Hayır", fontWeight = FontWeight.SemiBold)
+                    }
+                    TextButton(
+                        onClick = {
+                            showConflictDialog = false
+                            showConflictPicker = true
+                        },
+                        modifier = Modifier.fillMaxWidth().height(44.dp)
+                    ) {
+                        Text("Uygulanacak günleri seç", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        )
+    }
+
+    // Full-page day picker: back returns to the editor, save applies and closes.
+    if (showConflictPicker) adoptableDates?.let { dates ->
+        ConflictDaysPage(
+            dates = dates,
+            onBack = { showConflictPicker = false },
+            onApply = { chosen ->
+                showConflictPicker = false
+                scope.launch {
+                    savedTemplateId?.let { viewModel.applyTemplateToDatesSuspended(it, chosen) }
+                    onDismiss()
+                }
+            }
+        )
+    }
+}
+
+// ---- Full Screen Adoptable-Day Picker ----
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConflictDaysPage(
+    dates: List<String>,
+    onApply: (List<String>) -> Unit,
+    onBack: () -> Unit
+) {
+    val selected = remember { mutableStateListOf<String>().apply { addAll(dates) } }
+    val dayFormatter = remember {
+        DateTimeFormatter.ofPattern("d MMMM yyyy, EEEE", Locale("tr"))
+    }
+    // Back always returns to the template editor; the editor stays open.
+    BackHandler { onBack() }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer
+                ),
+                title = {
+                    Text(
+                        "Uygulanacak Günler",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Geri")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .background(MaterialTheme.colorScheme.background)
+                .padding(16.dp)
+        ) {
+            Text(
+                "Şablon uygulanacak günleri seç. İşaretlenen günlerin mevcut içeriği şablonla değiştirilir.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(12.dp))
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                items(dates, key = { it }) { date ->
+                    val parsed = runCatching { LocalDate.parse(date) }.getOrNull()
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                if (date in selected) selected.remove(date) else selected.add(date)
+                            }
+                            .padding(vertical = 4.dp, horizontal = 4.dp)
+                    ) {
+                        Checkbox(
+                            checked = date in selected,
+                            onCheckedChange = { checked ->
+                                if (checked) selected.add(date) else selected.remove(date)
+                            }
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            parsed?.format(dayFormatter) ?: date,
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = if (date in selected) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = { onApply(selected.toList()) },
+                enabled = selected.isNotEmpty(),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+            ) {
+                Text(
+                    "Kaydet (${selected.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
     }
 }
