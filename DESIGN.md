@@ -16,27 +16,13 @@ Locked visual system. Future design work in this repo defers to this file.
 - **FIRST VIEWPORT** — Compact wordmark + template chip + today control. Date band:
   prev arrow — big day numeral with month/year + weekday — next arrow (both arrows always
   visible). Below: the rail with time ticks and block stops.
-- **FORM** — Operate mode. Committed color (teal owns ~30% of surfaces). System sans
-  (Roboto/Inter), roman type only, weight steps carry hierarchy. Radius 16–20 on
-  containers, pills only for small status/selection. One elevation language: hairline
-  border + elevation only on the active stop.
+- **FORM** — Operate mode. System sans (Roboto/Inter), roman type only, weight steps carry hierarchy. Radius and surface language come from `MaterialExpressiveTheme` component defaults (expressive shapes, MotionScheme). One elevation language: hairline border + elevation only on the active stop.
 
 ## Tokens (Compose)
 
-Defined in `android/app/src/main/java/com/clamit/ui/theme/Theme.kt` as `ClamitColors`.
+Renk sistemi: **M3 Expressive** — `MaterialExpressiveTheme` + `expressiveLightColorScheme`/`expressiveDarkColorScheme`; Android 12+ cihazlarda dynamic color (wallpaper). Typography/shapes/motionScheme theme default'larından gelir.
 
-| Role | Light | Dark |
-|---|---|---|
-| paper / background | `#F6F4EF` | `#111412` |
-| ink / onSurface | `#1C2321` | `#E4E7E2` |
-| primary (teal) | `#0E5C52` | `#8BD6C7` |
-| onPrimary | `#FFFFFF` | `#06302B` |
-| primaryContainer | `#B9E8DD` | `#1E5A50` |
-| signal amber (in_progress) | `#C2641B` | `#FFB77C` |
-| completed teal | `#1B7A5E` | `#7BD8AE` |
-| surface / surfaceContainerLow | `#F6F4EF` / `#F0EDE6` | `#111412` / `#181B19` |
-| outlineVariant (hairline) | `#CBC8BE` | `#3A403D` |
-| error | `#BA1A1A` | `#FFB4AB` |
+Status renkleri (kural 2) `ClamitStatusColors`'tan (anlamsal sabitler, expressive scheme'de karşılığı yok): completed teal `#1B7A5E`/`#7BD8AE` (dark), in_progress amber `#C2641B`/`#FFB77C` (dark), pending teal `#4C7A72`/`#8FC0B7` (dark); container'lar sırasıyla `#DCEFE6`, `#FBE3C8`, `#E4ECE9` (dark: `#16382C`, `#4A2C12`, `#1E2E2B`).
 
 ## Rules
 
