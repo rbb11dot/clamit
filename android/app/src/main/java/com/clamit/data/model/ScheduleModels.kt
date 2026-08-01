@@ -23,7 +23,6 @@ data class UpdateTemplateRequest(
 
 data class TimeBlock(
     val id: String = "",
-    val templateId: String = "",
     val name: String = "",
     val icon: String = "",
     val mode: String = "",
