@@ -205,7 +205,6 @@ func TestInvalidBodiesRejected(t *testing.T) {
 
 	// Missing template returns 404 on update.
 	req, _ := http.NewRequest("PUT", srv.URL+"/api/templates/missing", strings.NewReader(`{"name":"X"}`))
-	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -214,4 +213,56 @@ func TestInvalidBodiesRejected(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("update missing template: %d", resp.StatusCode)
 	}
+}
+
+// TestTemplateAdoptionEndpoints covers listing and applying a template to
+// pre-existing special days over HTTP.
+func TestTemplateAdoptionEndpoints(t *testing.T) {
+	srv := newTestServer(t)
+
+	// Materialize special days BEFORE any template exists: 2026-08-04 and
+	// 2026-08-11 are Tuesdays, 2026-08-05 is a Wednesday.
+	doJSON(t, "GET", srv.URL+"/api/schedule/2026-08-04", "", http.StatusOK)
+	doJSON(t, "GET", srv.URL+"/api/schedule/2026-08-11", "", http.StatusOK)
+	doJSON(t, "GET", srv.URL+"/api/schedule/2026-08-05", "", http.StatusOK)
+
+	bid := newBlock(t, srv, `{"name":"A","mode":"start_end","startTime":"07:00","endTime":"07:30"}`)
+	tid := newTemplate(t, srv, "Salı", "[2]", bid)
+
+	// Only the Tuesdays are listed.
+	out := doJSON(t, "GET", srv.URL+"/api/templates/"+tid+"/special-days", "", http.StatusOK)
+	dates := out["dates"].([]interface{})
+	if len(dates) != 2 || dates[0] != "2026-08-04" || dates[1] != "2026-08-11" {
+		t.Fatalf("special days: %v", out)
+	}
+
+	// Applying both Tuesdays + a wrong-weekday date converts only the Tuesdays.
+	out = doJSON(t, "POST", srv.URL+"/api/templates/"+tid+"/apply",
+		`{"dates":["2026-08-04","2026-08-05","2026-08-11"]}`, http.StatusOK)
+	if out["applied"].(float64) != 2 {
+		t.Fatalf("applied: %v", out)
+	}
+
+	entry := doJSON(t, "GET", srv.URL+"/api/schedule/2026-08-04", "", http.StatusOK)
+	if entry["isSpecial"] != false || entry["templateId"] != tid {
+		t.Fatalf("day not converted: %v", entry)
+	}
+	if blocks := entry["blocks"].([]interface{}); len(blocks) != 1 {
+		t.Fatalf("template blocks missing: %v", entry)
+	}
+
+	// The Wednesday stayed special.
+	wed := doJSON(t, "GET", srv.URL+"/api/schedule/2026-08-05", "", http.StatusOK)
+	if wed["isSpecial"] != true {
+		t.Fatalf("wednesday changed: %v", wed)
+	}
+
+	// The conflict list is now empty.
+	out = doJSON(t, "GET", srv.URL+"/api/templates/"+tid+"/special-days", "", http.StatusOK)
+	if len(out["dates"].([]interface{})) != 0 {
+		t.Fatalf("conflict list not empty: %v", out)
+	}
+
+	// An invalid date in the apply body is rejected.
+	doRaw(t, "POST", srv.URL+"/api/templates/"+tid+"/apply", `{"dates":["not-a-date"]}`, http.StatusBadRequest)
 }

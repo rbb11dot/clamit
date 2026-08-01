@@ -910,3 +910,77 @@ func TestOpenMigratesLegacySchema(t *testing.T) {
 		t.Fatalf("day-owned block not visible: %+v", entry.Blocks)
 	}
 }
+
+// TestListAndApplySpecialDays covers template adoption: days materialized as
+// special before their template existed are listed for the template's repeat
+// days and converted on demand (snapshot dropped, template linked).
+func TestListAndApplySpecialDays(t *testing.T) {
+	r := newTestRepo(t)
+	block, err := r.CreateBlock(context.Background(), models.CreateBlockReq{
+		Name: "A", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Materialize days BEFORE any template exists → they become special days.
+	// 2026-08-04 = Tuesday, 2026-08-11 = Tuesday, 2026-08-05 = Wednesday.
+	for _, date := range []string{"2026-08-04", "2026-08-11", "2026-08-05"} {
+		if _, err := r.GetOrCreateEntry(context.Background(), date); err != nil {
+			t.Fatalf("create entry %s: %v", date, err)
+		}
+	}
+	// Give one Tuesday a custom block so the conversion has a snapshot to drop.
+	if err := r.AddSpecialBlock(context.Background(), "2026-08-04", block.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	tmpl := newTemplateWithBlocks(t, r, "Salı", []int{2}, block.ID)
+
+	// Only the Tuesdays match the template's repeatDays, ordered by date.
+	dates, err := r.ListSpecialDaysForTemplate(context.Background(), tmpl.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"2026-08-04", "2026-08-11"}
+	if len(dates) != len(want) || dates[0] != want[0] || dates[1] != want[1] {
+		t.Fatalf("special days: got %v, want %v", dates, want)
+	}
+
+	// Apply converts both Tuesdays; the Wednesday (2026-08-05) and the Sunday
+	// (2026-08-02) are skipped — their weekday is not in repeatDays.
+	applied, err := r.ApplyTemplateToDates(context.Background(), tmpl.ID,
+		[]string{"2026-08-04", "2026-08-05", "2026-08-11", "2026-08-02"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if applied != 2 {
+		t.Fatalf("applied = %d, want 2", applied)
+	}
+
+	entry, err := r.GetEntry(context.Background(), "2026-08-04")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry.IsSpecial || entry.TemplateID == nil || *entry.TemplateID != tmpl.ID {
+		t.Fatalf("day not converted: %+v", entry)
+	}
+	if len(entry.Blocks) != 1 || entry.Blocks[0].TimeBlockID != block.ID {
+		t.Fatalf("template blocks not applied: %+v", entry.Blocks)
+	}
+	// The day-owned copy was dropped by the conversion.
+	var owned int
+	r.db.QueryRow(`SELECT COUNT(*) FROM time_blocks WHERE entry_id=?`, entry.ID).Scan(&owned)
+	if owned != 0 {
+		t.Fatalf("day-owned blocks survived conversion: %d", owned)
+	}
+
+	// Applying again is a no-op — the days are no longer special.
+	applied, err = r.ApplyTemplateToDates(context.Background(), tmpl.ID, []string{"2026-08-04"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if applied != 0 {
+		t.Fatalf("re-apply converted %d days", applied)
+	}
+}
