@@ -120,3 +120,13 @@ data class UpdateManualStatusRequest(
 data class AddBlockRequest(
     val blockId: String
 )
+
+/** ISO dates of special days that would adopt a template (weekday in repeatDays). */
+data class SpecialDaysResponse(
+    val dates: List<String> = emptyList()
+)
+
+/** Dates to convert into template-linked days. */
+data class ApplyTemplateRequest(
+    val dates: List<String>
+)

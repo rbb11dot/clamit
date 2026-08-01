@@ -345,6 +345,52 @@ class ScheduleViewModel(
         }
     }
 
+    /** Full-save template edit that reports success (used by the editor to
+     *  decide whether to check for adoptable special days). */
+    suspend fun updateTemplateSuspended(
+        id: String,
+        name: String,
+        icon: String,
+        repeatDays: List<Int>
+    ): Boolean {
+        return try {
+            repository.updateTemplate(id, UpdateTemplateRequest(name, icon, repeatDays))
+            load()
+            true
+        } catch (e: Exception) {
+            _uiState.value = _uiState.value.copy(
+                error = e.message ?: "Şablon güncellenemedi"
+            )
+            false
+        }
+    }
+
+    /** ISO dates of special days that would adopt the template (empty on failure). */
+    suspend fun fetchSpecialDaysSuspended(templateId: String): List<String> {
+        return try {
+            repository.getTemplateSpecialDays(templateId)
+        } catch (e: Exception) {
+            _uiState.value = _uiState.value.copy(
+                error = e.message ?: "Özel günler alınamadı"
+            )
+            emptyList()
+        }
+    }
+
+    /** Applies the template to the given dates. Returns true on success. */
+    suspend fun applyTemplateToDatesSuspended(templateId: String, dates: List<String>): Boolean {
+        return try {
+            repository.applyTemplateToDates(templateId, dates)
+            load()
+            true
+        } catch (e: Exception) {
+            _uiState.value = _uiState.value.copy(
+                error = e.message ?: "Şablon uygulanamadı"
+            )
+            false
+        }
+    }
+
     fun addBlockToDate(blockId: String) {
         if (mutating) return
         mutating = true

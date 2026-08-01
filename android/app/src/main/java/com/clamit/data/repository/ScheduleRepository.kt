@@ -12,6 +12,11 @@ class ScheduleRepository(private val api: ScheduleApi) {
     suspend fun updateTemplate(id: String, req: UpdateTemplateRequest) = api.updateTemplate(id, req)
     suspend fun deleteTemplate(id: String) = api.deleteTemplate(id)
 
+    // Template adoption of pre-existing special days
+    suspend fun getTemplateSpecialDays(id: String): List<String> = api.getTemplateSpecialDays(id).dates
+    suspend fun applyTemplateToDates(id: String, dates: List<String>) =
+        api.applyTemplateToDates(id, ApplyTemplateRequest(dates))
+
     // Blocks — the library
     suspend fun createBlock(req: CreateBlockRequest) = api.createBlock(req)
     suspend fun listBlocks() = api.listBlocks()

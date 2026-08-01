@@ -21,6 +21,14 @@ interface ScheduleApi {
     @DELETE("api/templates/{id}")
     suspend fun deleteTemplate(@Path("id") id: String)
 
+    // Template → special-day adoption: special days that missed the template
+    // can be listed and converted into template-linked days.
+    @GET("api/templates/{id}/special-days")
+    suspend fun getTemplateSpecialDays(@Path("id") id: String): SpecialDaysResponse
+
+    @POST("api/templates/{id}/apply")
+    suspend fun applyTemplateToDates(@Path("id") id: String, @Body req: ApplyTemplateRequest)
+
     // Blocks — the library. Blocks are standalone; templates reference them
     // through the junction (many-to-many).
     @POST("api/blocks")
