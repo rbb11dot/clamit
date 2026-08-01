@@ -786,3 +786,40 @@ func TestOpenMigratesLegacySchema(t *testing.T) {
 		t.Fatalf("day-owned block not visible: %+v", entry.Blocks)
 	}
 }
+
+func TestTemplatesIncludeBlocksAndSubtasks(t *testing.T) {
+	r := newTestRepo(t)
+	tmpl, _ := r.CreateTemplate(context.Background(), models.CreateTemplateReq{Name: "T", Icon: "star", RepeatDays: []int{1}})
+	if _, err := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+		Name: "A", Mode: "start_end", StartTime: "07:00", EndTime: new("07:30"),
+		Subtasks: []models.SubtaskReq{{Name: "s1"}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.CreateBlock(context.Background(), tmpl.ID, models.CreateBlockReq{
+		Name: "B", Mode: "start_duration", StartTime: "08:00", DurationMin: new(30),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The library UI renders blocks and their subtasks straight from template
+	// lists — both must be populated.
+	list, err := r.ListTemplates(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || len(list[0].Blocks) != 2 {
+		t.Fatalf("templates missing blocks: %+v", list)
+	}
+	if list[0].Blocks[0].Name != "A" || len(list[0].Blocks[0].Subtasks) != 1 {
+		t.Fatalf("blocks missing subtasks: %+v", list[0].Blocks)
+	}
+
+	got, err := r.GetTemplate(context.Background(), tmpl.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Blocks) != 2 || got.Blocks[1].Name != "B" {
+		t.Fatalf("get template missing blocks: %+v", got.Blocks)
+	}
+}

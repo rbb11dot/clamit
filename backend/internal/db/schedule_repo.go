@@ -48,6 +48,11 @@ func (r *ScheduleRepo) GetTemplate(ctx context.Context, id string) (*models.DayT
 		return nil, fmt.Errorf("get template: %w", err)
 	}
 	json.Unmarshal([]byte(daysJSON), &t.RepeatDays)
+	blocks, err := r.ListBlocks(ctx, t.ID)
+	if err != nil {
+		return nil, fmt.Errorf("get template blocks: %w", err)
+	}
+	t.Blocks = blocks
 	return &t, nil
 }
 
@@ -67,6 +72,14 @@ func (r *ScheduleRepo) ListTemplates(ctx context.Context) ([]models.DayTemplate,
 			return nil, fmt.Errorf("scan template: %w", err)
 		}
 		json.Unmarshal([]byte(daysJSON), &t.RepeatDays)
+		// The app renders the block library from template lists (Zaman Blokları
+		// page, template cards, template picker), so every template ships with
+		// its blocks and subtasks. Localhost scale makes the N+1 irrelevant.
+		blocks, err := r.ListBlocks(ctx, t.ID)
+		if err != nil {
+			return nil, fmt.Errorf("list template blocks: %w", err)
+		}
+		t.Blocks = blocks
 		templates = append(templates, t)
 	}
 	return templates, nil
@@ -197,12 +210,19 @@ func (r *ScheduleRepo) ListBlocks(ctx context.Context, templateID string) ([]mod
 	}
 	defer rows.Close()
 
-	var blocks []models.TimeBlock
+	blocks := make([]models.TimeBlock, 0)
 	for rows.Next() {
 		var b models.TimeBlock
 		if err := rows.Scan(&b.ID, &b.TemplateID, &b.Name, &b.Icon, &b.Mode, &b.StartTime, &b.EndTime, &b.DurationMin, &b.BlockOrder, &b.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan block: %w", err)
 		}
+		// Subtasks ride along: the app's block editor and list render them from
+		// template blocks.
+		subtasks, err := r.ListSubtasks(ctx, b.ID)
+		if err != nil {
+			return nil, fmt.Errorf("list block subtasks: %w", err)
+		}
+		b.Subtasks = subtasks
 		blocks = append(blocks, b)
 	}
 	return blocks, nil
