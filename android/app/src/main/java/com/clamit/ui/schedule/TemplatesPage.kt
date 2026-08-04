@@ -1,6 +1,7 @@
 package com.clamit.ui.schedule
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -166,7 +167,9 @@ private fun TemplateCardItem(
     val dayAbbreviations = listOf("Pzr", "Pzt", "Sal", "Çar", "Per", "Cum", "Cmt")
 
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -176,6 +179,7 @@ private fun TemplateCardItem(
                 // Icon Tile
                 Surface(
                     color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = MaterialTheme.shapes.medium,
                     modifier = Modifier.size(44.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -242,7 +246,8 @@ private fun TemplateCardItem(
                     val isSelected = index in template.repeatDays
                     Surface(
                         color = if (isSelected) MaterialTheme.colorScheme.secondaryContainer
-                        else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f)
+                        else MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.5f),
+                        shape = MaterialTheme.shapes.small
                     ) {
                         Text(
                             text = shortName,
@@ -352,7 +357,9 @@ fun TemplateEditorPage(
                 )
                 Spacer(Modifier.height(8.dp))
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    shape = MaterialTheme.shapes.medium,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         dayNames.forEachIndexed { index, dayName ->
@@ -395,7 +402,9 @@ fun TemplateEditorPage(
 				)
 				Spacer(Modifier.height(8.dp))
 				Card(
-					colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+					colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+					shape = MaterialTheme.shapes.medium,
+					border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
 				) {
 					Column(modifier = Modifier.padding(12.dp)) {
 						if (sectionBlocks.isEmpty()) {
