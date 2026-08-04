@@ -33,8 +33,18 @@ fun IconPickerSheet(
             ) {
                 items(ScheduleIcons.all) { iconName ->
                     val vector = ScheduleIcons.getIconOrDefault(iconName)
+                    val isSelected = iconName == selectedIcon
+                    val buttonColors = if (isSelected) {
+                        IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    } else {
+                        IconButtonDefaults.filledTonalIconButtonColors()
+                    }
                     FilledTonalIconButton(
                         onClick = { onSelect(iconName); onDismiss() },
+                        colors = buttonColors,
                         modifier = Modifier.size(48.dp)
                     ) {
                         Icon(vector, contentDescription = iconName, modifier = Modifier.size(24.dp))

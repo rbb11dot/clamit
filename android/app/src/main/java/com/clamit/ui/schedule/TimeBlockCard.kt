@@ -1,12 +1,18 @@
 package com.clamit.ui.schedule
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -18,6 +24,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -48,7 +55,7 @@ fun TimeBlockCard(
     val containerColor = when {
         isCompleted -> ClamitStatusColors.CompletedBg
         isInProgress -> ClamitStatusColors.SignalAmberBg
-        else -> ClamitStatusColors.PendingBg
+        else -> MaterialTheme.colorScheme.surfaceContainerLow
     }
     val labelText = when {
         isCompleted -> "Tamamlandı"
@@ -56,22 +63,44 @@ fun TimeBlockCard(
         else -> "Bekliyor"
     }
 
-    val animatedBg by animateColorAsState(
-        targetValue = if (isInProgress || isCompleted) containerColor
-        else MaterialTheme.colorScheme.surfaceContainerLow,
-        label = "stopBg"
+    // DESIGN.md rule 7: one card language — hairline outlineVariant border over
+    // surfaceContainerLow; the in-progress stop is the only elevated surface.
+    val animatedBg by animateColorAsState(targetValue = containerColor, label = "stopBg")
+    val animatedBorder by animateColorAsState(
+        targetValue = if (isInProgress) ClamitStatusColors.SignalAmber.copy(alpha = 0.65f)
+        else MaterialTheme.colorScheme.outlineVariant,
+        label = "stopBorder"
+    )
+
+    // Motion: the active node breathes so the "now" stop reads at a glance.
+    val pulse by rememberInfiniteTransition(label = "stopPulse").animateFloat(
+        initialValue = 0.82f,
+        targetValue = 1.18f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 700, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "nodePulse"
     )
 
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = animatedBg)
+        shape = MaterialTheme.shapes.medium,
+        colors = CardDefaults.cardColors(containerColor = animatedBg),
+        border = BorderStroke(1.dp, animatedBorder),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (isInProgress) 2.dp else 0.dp
+        )
     ) {
         Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 14.dp)) {
-            // ===== Rail: time + spine + node =====
+            // ===== Rail: continuous spine + time + node =====
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.width(44.dp)
             ) {
+                // spine above the stop, reaching the card edge
+                Box(Modifier.width(2.dp).height(14.dp).background(spineColor(isInProgress, nodeColor)))
+                Spacer(Modifier.height(4.dp))
                 Text(
                     text = block.startTime,
                     style = MaterialTheme.typography.labelLarge,
@@ -82,25 +111,38 @@ fun TimeBlockCard(
                     maxLines = 2,
                     softWrap = true
                 )
-                Spacer(Modifier.height(6.dp))
-                // Node on the spine
-                Box(
-                    modifier = Modifier
-                        .size(if (isInProgress) 14.dp else 12.dp)
-                        .border(
-                            width = if (isCompleted || isInProgress) 0.dp else 2.dp,
-                            color = nodeColor,
-                            shape = CircleShape
+                Spacer(Modifier.height(4.dp))
+                // spine into the node
+                Box(Modifier.width(2.dp).height(8.dp).background(spineColor(isInProgress, nodeColor)))
+                // node on the spine
+                if (isInProgress) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(20.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(ClamitStatusColors.SignalAmber.copy(alpha = 0.22f), CircleShape)
                         )
-                        .background(if (isCompleted || isInProgress) nodeColor else Color.Transparent, CircleShape)
-                )
-                // Spine continues below the node
-                Box(
-                    modifier = Modifier
-                        .width(2.dp)
-                        .weight(1f)
-                        .background(nodeColor.copy(alpha = if (isInProgress) 0.9f else 0.35f))
-                )
+                        Box(
+                            modifier = Modifier
+                                .size(14.dp)
+                                .graphicsLayer { scaleX = pulse; scaleY = pulse }
+                                .background(nodeColor, CircleShape)
+                        )
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(if (isCompleted) 12.dp else 10.dp)
+                            .border(
+                                width = if (isCompleted) 0.dp else 2.dp,
+                                color = nodeColor,
+                                shape = CircleShape
+                            )
+                            .background(if (isCompleted) nodeColor else Color.Transparent, CircleShape)
+                    )
+                }
+                // spine continues below the node to the card edge
+                Box(Modifier.width(2.dp).weight(1f).background(spineColor(isInProgress, nodeColor)))
             }
 
             Spacer(Modifier.width(14.dp))
@@ -110,16 +152,16 @@ fun TimeBlockCard(
                 // Header: icon tile + name + status label
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
+                        shape = MaterialTheme.shapes.medium,
                         color = nodeColor.copy(alpha = 0.12f),
-                        modifier = Modifier.size(38.dp)
+                        modifier = Modifier.size(40.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = ScheduleIcons.getIconOrDefault(block.icon),
                                 contentDescription = null,
                                 tint = nodeColor,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(21.dp)
                             )
                         }
                     }
@@ -164,22 +206,22 @@ fun TimeBlockCard(
                         )
                     }
 
-					// Edit: day blocks only are editable here (library edits live on the
-					// Zaman Blokları page). A template-linked day detaches on save.
-					if (onEdit != null) {
-						Spacer(Modifier.width(4.dp))
-						IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
-							Icon(
-								Icons.Default.Edit,
-								contentDescription = "Bloğu düzenle",
-								tint = MaterialTheme.colorScheme.primary,
-								modifier = Modifier.size(18.dp)
-							)
-						}
-					}
+                    // Edit: day blocks only are editable here (library edits live on the
+                    // Zaman Blokları page). A template-linked day detaches on save.
+                    if (onEdit != null) {
+                        Spacer(Modifier.width(4.dp))
+                        IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                Icons.Default.Edit,
+                                contentDescription = "Bloğu düzenle",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
 
-					// Remove from day (special days only): re-addable from the library
-					if (onRemoveFromDay != null) {
+                    // Remove from day (special days only): re-addable from the library
+                    if (onRemoveFromDay != null) {
                         Spacer(Modifier.width(4.dp))
                         IconButton(onClick = { confirmRemove = true }, modifier = Modifier.size(32.dp)) {
                             Icon(
@@ -201,7 +243,7 @@ fun TimeBlockCard(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .clip(MaterialTheme.shapes.small)
                                     .clickable { onToggleSubtask(subtask.subtaskId) }
                                     .padding(vertical = 2.dp, horizontal = 2.dp)
                             ) {
@@ -282,6 +324,9 @@ fun TimeBlockCard(
         )
     }
 }
+
+private fun spineColor(isInProgress: Boolean, nodeColor: Color): Color =
+    nodeColor.copy(alpha = if (isInProgress) 0.9f else 0.35f)
 
 private fun durationText(block: BlockState): String = when {
     block.mode == "start_end" && !block.endTime.isNullOrBlank() ->

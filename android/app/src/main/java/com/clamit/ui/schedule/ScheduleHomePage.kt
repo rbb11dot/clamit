@@ -1,11 +1,17 @@
 package com.clamit.ui.schedule
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -19,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import com.clamit.data.model.BlockState
 import com.clamit.data.model.Subtask
 import com.clamit.data.model.TimeBlock
+import com.clamit.ui.theme.ClamitStatusColors
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -101,72 +108,83 @@ fun ScheduleHomePage(
                 .padding(padding)
                 .background(MaterialTheme.colorScheme.background)
         ) {
-            // ===== Date band: prev — big day numeral + month/year + weekday — next =====
+            // ===== Hero date band: prev — month/year + big day numeral + weekday — next =====
+            // The numeral is the typographic anchor of the rail (DESIGN.md THESIS);
+            // both arrows are always visible (DESIGN.md rule 4). Today gets an amber dot.
+            val isToday = uiState.currentDate == LocalDate.now()
             Surface(
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
+                shape = MaterialTheme.shapes.large,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 10.dp)
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 12.dp)
                 ) {
                     // Prev day
                     IconButton(
                         onClick = viewModel::goToPreviousDay,
-                        modifier = Modifier.size(42.dp)
+                        modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
                             Icons.Default.ArrowBack,
                             contentDescription = "Önceki gün",
-                            tint = MaterialTheme.colorScheme.onSurface
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
                     // Date core
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
                             .weight(1f)
                             .clickable(onClick = onDatePicker)
-                            .padding(horizontal = 4.dp),
-                        horizontalArrangement = Arrangement.Center
+                            .padding(horizontal = 4.dp)
                     ) {
                         Text(
-                            text = uiState.currentDate.dayOfMonth.toString().padStart(2, '0'),
-                            style = MaterialTheme.typography.displaySmall,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = (-1).sp,
-                            color = MaterialTheme.colorScheme.onSurface
+                            text = uiState.currentDate.format(monthFormatter).uppercase(Locale("tr")),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 1.6.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Spacer(Modifier.width(12.dp))
-                        Column(horizontalAlignment = Alignment.Start) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = uiState.currentDate.format(monthFormatter),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
+                                text = uiState.currentDate.dayOfMonth.toString().padStart(2, '0'),
+                                style = MaterialTheme.typography.displayMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = (-1.5).sp,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            Text(
-                                text = uiState.currentDate.format(dayFormatter),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            if (isToday) {
+                                Spacer(Modifier.width(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(9.dp)
+                                        .background(ClamitStatusColors.SignalAmber, CircleShape)
+                                )
+                            }
                         }
+                        Text(
+                            text = uiState.currentDate.format(dayFormatter),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                     }
 
                     // Next day
                     IconButton(
                         onClick = viewModel::goToNextDay,
-                        modifier = Modifier.size(42.dp)
+                        modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
                             Icons.Default.ArrowForward,
                             contentDescription = "Sonraki gün",
-                            tint = MaterialTheme.colorScheme.onSurface
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -178,71 +196,82 @@ fun ScheduleHomePage(
                     .fillMaxSize()
                     .padding(horizontal = 16.dp)
             ) {
-                when {
-                    uiState.isLoading -> {
-                        LoadingIndicator(
-                            modifier = Modifier.align(Alignment.Center),
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-
-                    uiState.error != null -> {
-                        Column(
-                            modifier = Modifier.align(Alignment.Center),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                Icons.Default.WifiOff,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(40.dp)
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                "Hata oluştu",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                text = uiState.error,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(Modifier.height(16.dp))
-                            Button(
-                                onClick = viewModel::load
-                            ) {
-                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Tekrar Dene")
+                // Day changes crossfade so the rail never flashes blank between loads.
+                AnimatedContent(
+                    targetState = uiState.currentDate,
+                    transitionSpec = {
+                        fadeIn(animationSpec = tween(280)) togetherWith fadeOut(animationSpec = tween(220))
+                    },
+                    label = "dayChange"
+                ) {
+                    Box(Modifier.fillMaxSize()) {
+                        when {
+                            uiState.isLoading -> {
+                                LoadingIndicator(
+                                    modifier = Modifier.align(Alignment.Center),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
                             }
-                        }
-                    }
 
-                    else -> {
-                        val entry = uiState.entry
-                        if (entry == null || entry.blocks.isEmpty()) {
-                            EmptyDayState(onAddBlock = onAddBlock)
-                        } else {
-                            LazyColumn(
-                                verticalArrangement = Arrangement.spacedBy(4.dp),
-                                contentPadding = PaddingValues(top = 10.dp, bottom = 96.dp)
-                            ) {
-                                items(entry.blocks, key = { it.timeBlockId }) { block ->
-                                    TimeBlockCard(
-                                        block = block,
-                                        onToggleSubtask = { viewModel.toggleSubtask(block.timeBlockId, it) },
-                                        onSetCompleted = { viewModel.setManualStatus(block.timeBlockId, "completed") },
-                                        onSetNotCompleted = { viewModel.setManualStatus(block.timeBlockId, "not_completed") },
-                                        onRemoveFromDay = if (entry.isSpecial) {
-                                            { viewModel.removeSpecialBlockFromDay(block.timeBlockId) }
-                                        } else {
-                                            null
-                                        },
-                                        onEdit = { onEditBlock(block.toTimeBlock()) }
+                            uiState.error != null -> {
+                                Column(
+                                    modifier = Modifier.align(Alignment.Center),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        Icons.Default.WifiOff,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(40.dp)
                                     )
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(
+                                        "Hata oluştu",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = uiState.error,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(Modifier.height(16.dp))
+                                    Button(
+                                        onClick = viewModel::load
+                                    ) {
+                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(8.dp))
+                                        Text("Tekrar Dene")
+                                    }
+                                }
+                            }
+
+                            else -> {
+                                val entry = uiState.entry
+                                if (entry == null || entry.blocks.isEmpty()) {
+                                    EmptyDayState(onAddBlock = onAddBlock)
+                                } else {
+                                    LazyColumn(
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                        contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp)
+                                    ) {
+                                        items(entry.blocks, key = { it.timeBlockId }) { block ->
+                                            TimeBlockCard(
+                                                block = block,
+                                                onToggleSubtask = { viewModel.toggleSubtask(block.timeBlockId, it) },
+                                                onSetCompleted = { viewModel.setManualStatus(block.timeBlockId, "completed") },
+                                                onSetNotCompleted = { viewModel.setManualStatus(block.timeBlockId, "not_completed") },
+                                                onRemoveFromDay = if (entry.isSpecial) {
+                                                    { viewModel.removeSpecialBlockFromDay(block.timeBlockId) }
+                                                } else {
+                                                    null
+                                                },
+                                                onEdit = { onEditBlock(block.toTimeBlock()) }
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -264,14 +293,15 @@ private fun EmptyDayState(onAddBlock: () -> Unit) {
     ) {
         Surface(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            modifier = Modifier.size(72.dp)
+            shape = MaterialTheme.shapes.large,
+            modifier = Modifier.size(76.dp)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     Icons.Default.Event,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(34.dp)
                 )
             }
         }

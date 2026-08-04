@@ -1,5 +1,6 @@
 package com.clamit.ui.schedule
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -162,7 +163,9 @@ private fun TimeBlockListItem(
     onDelete: () -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -172,6 +175,7 @@ private fun TimeBlockListItem(
                 // Icon Box
                 Surface(
                     color = MaterialTheme.colorScheme.secondaryContainer,
+                    shape = MaterialTheme.shapes.medium,
                     modifier = Modifier.size(44.dp)
                 ) {
                     Box(contentAlignment = Alignment.Center) {
@@ -212,7 +216,8 @@ private fun TimeBlockListItem(
 
                 // Template membership badges (a block can belong to several templates)
                 Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = MaterialTheme.shapes.small
                 ) {
                     Text(
                         text = templateNames.joinToString(", ").ifEmpty { "Şablonsuz" },
@@ -587,6 +592,8 @@ fun BlockEditorPage(
             itemsIndexed(subtasks, key = { _, draft -> draft.id }) { index, subtask ->
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    shape = MaterialTheme.shapes.medium,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(

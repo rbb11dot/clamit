@@ -1,5 +1,6 @@
 package com.clamit.ui.schedule
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -132,6 +133,8 @@ private fun TemplatePickerRow(
     Surface(
         color = if (selected) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
         else MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.medium,
+        border = if (selected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
@@ -142,6 +145,7 @@ private fun TemplatePickerRow(
         ) {
             Surface(
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
+                shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.size(36.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
